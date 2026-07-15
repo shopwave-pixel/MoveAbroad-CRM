@@ -110,6 +110,9 @@ function doPost(e) {
       payload = e.parameter;
     }
     
+    // Add logging of payload as requested
+    Logger.log(JSON.stringify(payload));
+    
     const action = payload.action;
     const sheets = setupSheets();
     

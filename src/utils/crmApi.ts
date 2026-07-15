@@ -1060,31 +1060,46 @@ export async function loginUser(
   loginId: string,
   passwordPlain: string
 ): Promise<{ success: boolean; user?: User; error?: string }> {
-  const passwordClean = passwordPlain.trim();
   const loginIdClean = loginId.trim();
+  const passwordClean = passwordPlain.trim();
+  
+  if (!loginIdClean) {
+    return { success: false, error: 'User not found' };
+  }
+  if (!passwordClean) {
+    return { success: false, error: 'Password incorrect' };
+  }
+
+  const payload = {
+    action: "login",
+    loginId: loginIdClean,
+    password: passwordClean
+  };
+
+  console.log("Frontend payload", payload);
   
   if (config.isLiveMode && config.webAppUrl) {
     try {
       const response = await fetchWithTracking(config.webAppUrl, {
         method: 'POST',
-        mode: 'cors',
         headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          action: 'login',
-          loginId: loginIdClean,
-          password: passwordClean
-        })
+        body: JSON.stringify(payload)
       });
       if (!response.ok) {
-        throw new Error(`HTTP status ${response.status}`);
+        console.log("Backend payload (HTTP error)", response.status);
+        console.log("Authentication result", "Backend connection failed");
+        return { success: false, error: "Backend connection failed" };
       }
       const data = await response.json();
+      console.log("Backend payload", data);
+      console.log("Authentication result", data.success ? "Success" : "Failed");
       return data;
     } catch (err: any) {
       console.error('GAS login error:', err);
-      return { success: false, error: `Connection failed: ${err.message || err}. Let's fallback to Local/Demo connection if sheets aren't set up yet.` };
+      console.log("Authentication result", "Backend connection failed");
+      return { success: false, error: "Backend connection failed" };
     }
   }
 
@@ -1111,14 +1126,18 @@ export async function loginUser(
   if (!user) {
     const userExists = users.some(u => u.loginId.toLowerCase().trim() === loginIdClean.toLowerCase());
     if (userExists) {
+      console.log("Authentication result", "Password incorrect");
       return { success: false, error: 'Password incorrect' };
     } else {
+      console.log("Authentication result", "User not found");
       return { success: false, error: 'User not found' };
     }
   }
   if (user.status === 'Disabled') {
+    console.log("Authentication result", "Account disabled");
     return { success: false, error: 'Account disabled' };
   }
+  console.log("Authentication result", "Success");
   return { success: true, user };
 }
 
