@@ -45,6 +45,14 @@ function doGet(e) {
         users: users
       });
     }
+
+    if (action === 'getCustomers' || action === 'get_customers') {
+      const customers = getCustomers(sheets.customersSheet);
+      return jsonResponse({
+        success: true,
+        customers: customers
+      });
+    }
     
     if (action === 'search_customer') {
       const query = (e.parameter.query || '').toLowerCase();

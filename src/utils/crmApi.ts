@@ -305,6 +305,28 @@ export async function fetchCRMData(config: SyncConfig): Promise<CRMData> {
   return { customers, tickets, followUps };
 }
 
+// Fetch only customers
+export async function fetchCustomers(config: SyncConfig): Promise<Customer[]> {
+  if (config.isLiveMode && config.webAppUrl) {
+    try {
+      const response = await fetch(`${config.webAppUrl}?action=getCustomers`);
+      if (!response.ok) {
+        throw new Error(`HTTP Status ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.success) {
+        localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(data.customers || []));
+        return data.customers || [];
+      }
+    } catch (error) {
+      console.error('GAS fetch customers error:', error);
+    }
+  }
+  
+  initLocalStorage();
+  return JSON.parse(localStorage.getItem(STORAGE_KEY_CUSTOMERS) || '[]');
+}
+
 // Add a customer
 export async function addCustomer(
   config: SyncConfig,
