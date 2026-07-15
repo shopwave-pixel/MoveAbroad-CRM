@@ -39,7 +39,7 @@ export interface User {
   id: string; // e.g., USR-000001
   fullName: string;
   loginId: string;
-  passwordHash: string; // Stored as SHA-256 secure hash
+  password: string; // Stored password
   role: 'Admin' | 'Staff';
   status: 'Active' | 'Disabled';
   createdAt: string;

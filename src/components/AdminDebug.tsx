@@ -27,8 +27,7 @@ import {
   addCustomer, 
   createTicket, 
   createFollowUp, 
-  fetchCRMData,
-  hashPassword
+  fetchCRMData
 } from '../utils/crmApi';
 
 interface AdminDebugProps {
@@ -209,7 +208,7 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
         id: 'USR-MOCK01',
         fullName: 'Test Restore User',
         loginId: 'restore',
-        passwordHash: 'hash',
+        password: 'hash',
         role: 'Staff',
         status: 'Active',
         createdAt: new Date().toISOString()

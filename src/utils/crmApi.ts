@@ -120,7 +120,7 @@ const INITIAL_USERS: User[] = [
     id: 'USR-000001',
     fullName: 'Admin',
     loginId: 'admin',
-    passwordHash: hashPassword('2026'),
+    password: '2026',
     role: 'Admin',
     status: 'Active',
     createdAt: new Date().toISOString()
@@ -129,7 +129,7 @@ const INITIAL_USERS: User[] = [
     id: 'USR-000002',
     fullName: 'Durjoy',
     loginId: 'durjoy',
-    passwordHash: hashPassword('2026'),
+    password: '2026',
     role: 'Staff',
     status: 'Active',
     createdAt: new Date().toISOString()
@@ -138,7 +138,7 @@ const INITIAL_USERS: User[] = [
     id: 'USR-000003',
     fullName: 'Mrinal',
     loginId: 'mrinal',
-    passwordHash: hashPassword('admin123'),
+    password: 'admin123',
     role: 'Staff',
     status: 'Active',
     createdAt: new Date().toISOString()
@@ -1060,7 +1060,8 @@ export async function loginUser(
   loginId: string,
   passwordPlain: string
 ): Promise<{ success: boolean; user?: User; error?: string }> {
-  const hash = hashPassword(passwordPlain);
+  const passwordClean = passwordPlain.trim();
+  const loginIdClean = loginId.trim();
   
   if (config.isLiveMode && config.webAppUrl) {
     try {
@@ -1072,8 +1073,8 @@ export async function loginUser(
         },
         body: JSON.stringify({
           action: 'login',
-          loginId,
-          passwordHash: hash
+          loginId: loginIdClean,
+          password: passwordClean
         })
       });
       if (!response.ok) {
@@ -1090,12 +1091,33 @@ export async function loginUser(
   // Local/Offline Mode
   initLocalStorage();
   const users: User[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
-  const user = users.find(u => u.loginId.toLowerCase() === loginId.toLowerCase() && u.passwordHash === hash);
+  
+  // Auto-create default admin in local storage if no users exist
+  if (users.length === 0 && loginIdClean.toLowerCase() === 'admin' && passwordClean === '2026') {
+    const defaultAdmin: User = {
+      id: 'USR-000001',
+      fullName: 'Admin',
+      loginId: 'admin',
+      password: '2026',
+      role: 'Admin',
+      status: 'Active',
+      createdAt: new Date().toISOString()
+    };
+    users.push(defaultAdmin);
+    localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
+  }
+  
+  const user = users.find(u => u.loginId.toLowerCase().trim() === loginIdClean.toLowerCase() && u.password.trim() === passwordClean);
   if (!user) {
-    return { success: false, error: 'Invalid Login ID or Password.' };
+    const userExists = users.some(u => u.loginId.toLowerCase().trim() === loginIdClean.toLowerCase());
+    if (userExists) {
+      return { success: false, error: 'Password incorrect' };
+    } else {
+      return { success: false, error: 'User not found' };
+    }
   }
   if (user.status === 'Disabled') {
-    return { success: false, error: 'This account has been disabled.' };
+    return { success: false, error: 'Account disabled' };
   }
   return { success: true, user };
 }
@@ -1150,7 +1172,6 @@ export async function createUser(
   role: 'Admin' | 'Staff',
   status: 'Active' | 'Disabled'
 ): Promise<{ success: boolean; user?: User; error?: string }> {
-  const hash = hashPassword(passwordPlain);
   if (config.isLiveMode && config.webAppUrl) {
     try {
       const response = await fetchWithTracking(config.webAppUrl, {
@@ -1163,7 +1184,7 @@ export async function createUser(
           action: 'create_user',
           fullName,
           loginId,
-          passwordHash: hash,
+          password: passwordPlain,
           role,
           status
         })
@@ -1203,7 +1224,7 @@ export async function createUser(
     id: userId,
     fullName,
     loginId,
-    passwordHash: hash,
+    password: passwordPlain,
     role,
     status,
     createdAt: new Date().toISOString()
@@ -1223,7 +1244,6 @@ export async function updateUser(
   role: 'Admin' | 'Staff' = 'Staff',
   status: 'Active' | 'Disabled' = 'Active'
 ): Promise<{ success: boolean; error?: string }> {
-  const hash = passwordPlain ? hashPassword(passwordPlain) : undefined;
   if (config.isLiveMode && config.webAppUrl) {
     try {
       const response = await fetchWithTracking(config.webAppUrl, {
@@ -1237,7 +1257,7 @@ export async function updateUser(
           id,
           fullName,
           loginId,
-          passwordHash: hash,
+          password: passwordPlain || undefined,
           role,
           status
         })
@@ -1252,7 +1272,7 @@ export async function updateUser(
           loginId, 
           role, 
           status, 
-          ...(hash ? { passwordHash: hash } : {}) 
+          ...(passwordPlain ? { password: passwordPlain } : {}) 
         } : u);
         localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
       }
@@ -1276,7 +1296,7 @@ export async function updateUser(
     loginId,
     role,
     status,
-    ...(hash ? { passwordHash: hash } : {})
+    ...(passwordPlain ? { password: passwordPlain } : {})
   } : u);
   localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
   return { success: true };
@@ -1336,7 +1356,6 @@ export async function setupDefaultSheetsAndAdmin(
   adminLoginId: string,
   adminPasswordPlain: string
 ): Promise<{ success: boolean; error?: string }> {
-  const hash = hashPassword(adminPasswordPlain);
   if (config.isLiveMode && config.webAppUrl) {
     try {
       const response = await fetchWithTracking(config.webAppUrl, {
@@ -1349,7 +1368,7 @@ export async function setupDefaultSheetsAndAdmin(
           action: 'setup_sheets',
           adminFullName,
           adminLoginId,
-          adminPasswordHash: hash
+          adminPassword: adminPasswordPlain
         })
       });
       if (!response.ok) throw new Error(`HTTP Status ${response.status}`);
@@ -1369,7 +1388,7 @@ export async function setupDefaultSheetsAndAdmin(
       id: 'USR-000001',
       fullName: adminFullName,
       loginId: adminLoginId,
-      passwordHash: hash,
+      password: adminPasswordPlain,
       role: 'Admin',
       status: 'Active',
       createdAt: new Date().toISOString()

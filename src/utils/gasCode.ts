@@ -117,9 +117,9 @@ function doPost(e) {
     if (action === 'setup_sheets') {
       const adminFullName = (payload.adminFullName || 'System Admin').trim();
       const adminLoginId = (payload.adminLoginId || '').trim();
-      const adminPasswordHash = (payload.adminPasswordHash || '').trim();
+      const adminPassword = (payload.adminPassword || '').trim();
       
-      if (adminLoginId && adminPasswordHash) {
+      if (adminLoginId && adminPassword) {
         const users = getUsers(sheets.usersSheet);
         const exists = users.some(u => u.loginId.toLowerCase() === adminLoginId.toLowerCase());
         if (!exists) {
@@ -129,7 +129,7 @@ function doPost(e) {
             userId,
             adminFullName,
             adminLoginId,
-            adminPasswordHash,
+            adminPassword,
             "Admin",
             "Active",
             createdAt
@@ -143,24 +143,69 @@ function doPost(e) {
     }
     
     if (action === 'login') {
-      const loginId = (payload.loginId || '').trim();
-      const passwordHash = (payload.passwordHash || '').trim();
+      const loginIdRaw = payload.loginId;
+      const passwordRaw = payload.password;
       
-      if (!loginId || !passwordHash) {
+      const loginId = typeof loginIdRaw === 'string' ? loginIdRaw.trim() : '';
+      const password = typeof passwordRaw === 'string' ? passwordRaw.trim() : '';
+      
+      console.log("Authentication logs:");
+      console.log("- Login ID received: '" + loginId + "'");
+      console.log("- Password received: '" + (password ? "******" : "empty") + "'");
+      
+      if (!sheets.usersSheet) {
+        console.log("- Result: Users sheet missing");
+        return jsonResponse({ success: false, error: "Users sheet missing" });
+      }
+      
+      if (!loginId || !password) {
+        console.log("- Result: Missing Login ID or Password");
         return jsonResponse({ success: false, error: "Login ID and Password are required." });
       }
       
-      const users = getUsers(sheets.usersSheet);
-      const user = users.find(u => u.loginId.toLowerCase() === loginId.toLowerCase() && u.passwordHash === passwordHash);
+      let users = getUsers(sheets.usersSheet);
+      
+      // Automatically create a default admin if no users exist
+      if (users.length === 0) {
+        console.log("- No users exist. Auto-creating default admin.");
+        const userId = "USR-000001";
+        const createdAt = new Date().toISOString();
+        sheets.usersSheet.appendRow([
+          userId,
+          "Admin",
+          "admin",
+          "2026",
+          "Admin",
+          "Active",
+          createdAt
+        ]);
+        SpreadsheetApp.flush();
+        users = getUsers(sheets.usersSheet);
+      }
+      
+      const user = users.find(u => u.loginId.toLowerCase().trim() === loginId.toLowerCase() && u.password.trim() === password);
       
       if (!user) {
-        return jsonResponse({ success: false, error: "Invalid Login ID or Password." });
+        const userExists = users.some(u => u.loginId.toLowerCase().trim() === loginId.toLowerCase());
+        console.log("- User found in sheet: " + (userExists ? "Yes" : "No"));
+        console.log("- Password matched: No");
+        console.log("- Final authentication result: Failed");
+        if (userExists) {
+          return jsonResponse({ success: false, error: "Password incorrect" });
+        } else {
+          return jsonResponse({ success: false, error: "User not found" });
+        }
       }
+      
+      console.log("- User found in sheet: Yes");
+      console.log("- Password matched: Yes");
       
       if (user.status === 'Disabled') {
-        return jsonResponse({ success: false, error: "Your account is disabled. Please contact the administrator." });
+        console.log("- Final authentication result: Failed (Account disabled)");
+        return jsonResponse({ success: false, error: "Account disabled" });
       }
       
+      console.log("- Final authentication result: Success");
       return jsonResponse({
         success: true,
         user: {
@@ -168,8 +213,7 @@ function doPost(e) {
           fullName: user.fullName,
           loginId: user.loginId,
           role: user.role,
-          status: user.status,
-          createdAt: user.createdAt
+          status: "Active"
         },
         message: "Login successful."
       });
@@ -178,24 +222,24 @@ function doPost(e) {
     if (action === 'create_user') {
       const fullName = (payload.fullName || '').trim();
       const loginId = (payload.loginId || '').trim();
-      const passwordHash = (payload.passwordHash || '').trim();
+      const password = (payload.password || '').trim();
       const role = (payload.role || 'Staff').trim();
       const status = (payload.status || 'Active').trim();
       
-      if (!fullName || !loginId || !passwordHash) {
+      if (!fullName || !loginId || !password) {
         return jsonResponse({ success: false, error: "Full Name, Login ID, and Password are required." });
       }
       
-      const users = getUsers(sheets.usersSheet);
-      const exists = users.some(u => u.loginId.toLowerCase() === loginId.toLowerCase());
+      const usersBefore = getUsers(sheets.usersSheet);
+      const exists = usersBefore.some(u => u.loginId.toLowerCase() === loginId.toLowerCase());
       if (exists) {
         return jsonResponse({ success: false, error: "A user with this Login ID already exists." });
       }
       
       let nextNum = 1;
-      if (users.length > 0) {
-        const nums = users.map(u => {
-          const match = u.id.match(/USR-(\\d+)/);
+      if (usersBefore.length > 0) {
+        const nums = usersBefore.map(u => {
+          const match = u.id.match(/USR-(\d+)/);
           return match ? parseInt(match[1], 10) : 0;
         });
         nextNum = Math.max(...nums) + 1;
@@ -207,21 +251,29 @@ function doPost(e) {
         userId,
         fullName,
         loginId,
-        passwordHash,
+        password,
         role,
         status,
         createdAt
       ]);
       
+      // Verify user was actually written before returning success
+      SpreadsheetApp.flush();
+      const usersAfter = getUsers(sheets.usersSheet);
+      const verifiedUser = usersAfter.find(u => u.id === userId);
+      if (!verifiedUser) {
+        return jsonResponse({ success: false, error: "Failed to write user to Google Sheets. Verification failed." });
+      }
+      
       return jsonResponse({
         success: true,
         user: {
-          id: userId,
-          fullName,
-          loginId,
-          role,
-          status,
-          createdAt
+          id: verifiedUser.id,
+          fullName: verifiedUser.fullName,
+          loginId: verifiedUser.loginId,
+          role: verifiedUser.role,
+          status: verifiedUser.status,
+          createdAt: verifiedUser.createdAt
         },
         message: "User created successfully."
       });
@@ -231,7 +283,7 @@ function doPost(e) {
       const id = payload.id;
       const fullName = (payload.fullName || '').trim();
       const loginId = (payload.loginId || '').trim();
-      const passwordHash = (payload.passwordHash || '').trim();
+      const password = (payload.password || '').trim();
       const role = (payload.role || 'Staff').trim();
       const status = (payload.status || 'Active').trim();
       
@@ -252,8 +304,8 @@ function doPost(e) {
         "Status": status
       };
       
-      if (passwordHash) {
-        updateData["Password"] = passwordHash;
+      if (password) {
+        updateData["Password"] = password;
       }
       
       const updated = updateRowById(sheets.usersSheet, id, 0, updateData);
@@ -692,7 +744,7 @@ function getUsers(sheet) {
     id: String(row[0]),
     fullName: String(row[1]),
     loginId: String(row[2]),
-    passwordHash: String(row[3]),
+    password: String(row[3]),
     role: String(row[4]),
     status: String(row[5]),
     createdAt: String(row[6])
