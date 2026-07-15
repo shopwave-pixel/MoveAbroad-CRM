@@ -42,6 +42,16 @@ export default function LoginScreen({ config, onLoginSuccess, onOpenSetupWizard 
       return;
     }
 
+    const payload = {
+      action: 'login',
+      loginId: trimmedId,
+      password: trimmedPass
+    };
+
+    console.log("Login Payload", payload);
+    console.log("Content-Type Header will be set to: 'application/json'");
+    console.log("JSON.stringify(payload) output:", JSON.stringify(payload));
+
     setIsLoading(true);
     try {
       const response = await loginUser(config, trimmedId, trimmedPass);
