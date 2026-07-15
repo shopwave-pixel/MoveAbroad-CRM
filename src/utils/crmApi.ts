@@ -78,21 +78,67 @@ export function hashPassword(password: string): string {
   return hex;
 }
 
+export let lastApiResponse: any = null;
+export let lastApiError: string | null = null;
+
+async function fetchWithTracking(input: string | Request, init?: RequestInit): Promise<Response> {
+  let finalInput = input;
+  const envApiUrl = (import.meta as any).env?.VITE_API_URL || '';
+  if (envApiUrl && typeof input === 'string') {
+    if (input.includes('?')) {
+      const queryString = input.substring(input.indexOf('?'));
+      finalInput = `${envApiUrl}${queryString}`;
+    } else {
+      finalInput = envApiUrl;
+    }
+  }
+
+  try {
+    const response = await fetch(finalInput, init);
+    const clone = response.clone();
+    try {
+      const json = await clone.json();
+      lastApiResponse = json;
+      if (json && !json.success) {
+        lastApiError = json.error || 'Request unsuccessful';
+      } else {
+        lastApiError = null;
+      }
+    } catch {
+      lastApiResponse = { status: response.status, statusText: response.statusText, url: response.url };
+      lastApiError = null;
+    }
+    return response;
+  } catch (err: any) {
+    lastApiError = err.message || String(err);
+    throw err;
+  }
+}
+
 const INITIAL_USERS: User[] = [
   {
     id: 'USR-000001',
-    fullName: 'System Administrator',
+    fullName: 'Admin',
     loginId: 'admin',
-    passwordHash: hashPassword('admin'),
+    passwordHash: hashPassword('2026'),
     role: 'Admin',
     status: 'Active',
     createdAt: new Date().toISOString()
   },
   {
     id: 'USR-000002',
-    fullName: 'Staff Officer',
-    loginId: 'staff',
-    passwordHash: hashPassword('staff'),
+    fullName: 'Durjoy',
+    loginId: 'durjoy',
+    passwordHash: hashPassword('2026'),
+    role: 'Staff',
+    status: 'Active',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'USR-000003',
+    fullName: 'Mrinal',
+    loginId: 'mrinal',
+    passwordHash: hashPassword('admin123'),
     role: 'Staff',
     status: 'Active',
     createdAt: new Date().toISOString()
@@ -245,6 +291,16 @@ export function initLocalStorage() {
 // Get synchronization configuration
 export function getSyncConfig(): SyncConfig {
   const stored = localStorage.getItem(STORAGE_KEY_CONFIG);
+  const envApiUrl = (import.meta as any).env?.VITE_API_URL || '';
+  
+  if (envApiUrl) {
+    return {
+      webAppUrl: envApiUrl,
+      isLiveMode: true,
+      setupComplete: true
+    };
+  }
+
   if (stored) {
     try {
       return JSON.parse(stored);
@@ -265,7 +321,7 @@ export async function fetchCRMData(config: SyncConfig): Promise<CRMData> {
   if (config.isLiveMode && config.webAppUrl) {
     try {
       const url = `${config.webAppUrl}?action=get_data`;
-      const response = await fetch(url, {
+      const response = await fetchWithTracking(url, {
         method: 'GET',
         mode: 'cors',
         headers: {
@@ -309,7 +365,7 @@ export async function fetchCRMData(config: SyncConfig): Promise<CRMData> {
 export async function fetchCustomers(config: SyncConfig): Promise<Customer[]> {
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetch(`${config.webAppUrl}?action=getCustomers`);
+      const response = await fetchWithTracking(`${config.webAppUrl}?action=getCustomers`);
       if (!response.ok) {
         throw new Error(`HTTP Status ${response.status}`);
       }
@@ -1008,7 +1064,7 @@ export async function loginUser(
   
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetch(config.webAppUrl, {
+      const response = await fetchWithTracking(config.webAppUrl, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -1039,7 +1095,7 @@ export async function loginUser(
     return { success: false, error: 'Invalid Login ID or Password.' };
   }
   if (user.status === 'Disabled') {
-    return { success: false, error: 'Your account is disabled. Please contact the administrator.' };
+    return { success: false, error: 'This account has been disabled.' };
   }
   return { success: true, user };
 }
@@ -1068,7 +1124,7 @@ export function clearSession() {
 export async function fetchUsers(config: SyncConfig): Promise<User[]> {
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetch(`${config.webAppUrl}?action=get_users`);
+      const response = await fetchWithTracking(`${config.webAppUrl}?action=get_users`);
       if (!response.ok) {
         throw new Error(`HTTP Status ${response.status}`);
       }
@@ -1097,7 +1153,7 @@ export async function createUser(
   const hash = hashPassword(passwordPlain);
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetch(config.webAppUrl, {
+      const response = await fetchWithTracking(config.webAppUrl, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -1170,7 +1226,7 @@ export async function updateUser(
   const hash = passwordPlain ? hashPassword(passwordPlain) : undefined;
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetch(config.webAppUrl, {
+      const response = await fetchWithTracking(config.webAppUrl, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -1229,7 +1285,7 @@ export async function updateUser(
 export async function deleteUser(config: SyncConfig, id: string): Promise<{ success: boolean; error?: string }> {
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetch(config.webAppUrl, {
+      const response = await fetchWithTracking(config.webAppUrl, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -1283,7 +1339,7 @@ export async function setupDefaultSheetsAndAdmin(
   const hash = hashPassword(adminPasswordPlain);
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetch(config.webAppUrl, {
+      const response = await fetchWithTracking(config.webAppUrl, {
         method: 'POST',
         mode: 'cors',
         headers: {

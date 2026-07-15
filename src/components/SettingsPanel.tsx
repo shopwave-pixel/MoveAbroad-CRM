@@ -21,13 +21,15 @@ interface SettingsPanelProps {
   onUpdateConfig: (newConfig: SyncConfig) => void;
   onRefreshData: () => Promise<void>;
   isLoading: boolean;
+  onOpenDebug?: () => void;
 }
 
 export default function SettingsPanel({
   config,
   onUpdateConfig,
   onRefreshData,
-  isLoading
+  isLoading,
+  onOpenDebug
 }: SettingsPanelProps) {
   const [urlInput, setUrlInput] = useState(config.webAppUrl);
   const [isCopied, setIsCopied] = useState(false);
@@ -201,6 +203,19 @@ export default function SettingsPanel({
                 {testResult.success ? '✓ Test Successful' : '✗ Connection Failed'}
               </div>
               {testResult.message}
+            </div>
+          )}
+          
+          {onOpenDebug && (
+            <div className="pt-4 border-t border-[#5A5A40]/10 dark:border-[#8a8a70]/20 mt-4 flex justify-end">
+              <button
+                type="button"
+                id="btn-open-debug-panel"
+                onClick={onOpenDebug}
+                className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/40 dark:hover:bg-emerald-950/40 px-4.5 py-2.5 rounded-full transition-all cursor-pointer"
+              >
+                🛠️ Admin Debug & Testing Center
+              </button>
             </div>
           )}
         </div>

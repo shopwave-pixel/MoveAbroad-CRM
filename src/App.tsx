@@ -28,6 +28,7 @@ import SettingsPanel from './components/SettingsPanel';
 import LoginScreen from './components/LoginScreen';
 import SetupWizard from './components/SetupWizard';
 import UserManagement from './components/UserManagement';
+import AdminDebug from './components/AdminDebug';
 
 import { 
   LayoutDashboard,
@@ -47,7 +48,7 @@ import {
 
 export default function App() {
   // Navigation & View States
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'tickets' | 'followups' | 'settings' | 'users'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'tickets' | 'followups' | 'settings' | 'users' | 'debug'>('dashboard');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string>('');
   const [isAddingCustomerInline, setIsAddingCustomerInline] = useState(false);
@@ -535,6 +536,7 @@ export default function App() {
                   onUpdateConfig={handleUpdateConfig}
                   onRefreshData={handleManualSync}
                   isLoading={isLoading}
+                  onOpenDebug={sessionUser?.role === 'Admin' ? () => setActiveTab('debug') : undefined}
                 />
               </div>
             )}
@@ -545,6 +547,17 @@ export default function App() {
                 <UserManagement
                   config={config}
                   currentUser={sessionUser}
+                />
+              </div>
+            )}
+
+            {/* 7. Admin Debug & Diagnostics View */}
+            {activeTab === 'debug' && sessionUser?.role === 'Admin' && (
+              <div className="max-w-4xl mx-auto">
+                <AdminDebug
+                  config={config}
+                  currentUser={sessionUser}
+                  onBack={() => setActiveTab('settings')}
                 />
               </div>
             )}
