@@ -1060,60 +1060,101 @@ export async function loginUser(
   loginId: string,
   passwordPlain: string
 ): Promise<{ success: boolean; user?: User; error?: string }> {
-  const loginIdClean = loginId.trim();
-  const passwordClean = passwordPlain.trim();
+  const loginIdClean = (loginId || '').trim();
+  const passwordClean = (passwordPlain || '').trim();
   
   if (!loginIdClean) {
-    return { success: false, error: 'User not found' };
+    console.log("Authentication result", "Missing loginId");
+    throw new Error("Missing loginId");
   }
   if (!passwordClean) {
-    return { success: false, error: 'Password incorrect' };
+    console.log("Authentication result", "Missing password");
+    throw new Error("Missing password");
   }
+
+  const passwordHash = hashPassword(passwordClean);
+  console.log("Password Hash:", passwordHash);
 
   const payload = {
     action: "login",
     loginId: loginIdClean,
-    password: passwordClean
+    passwordHash: passwordHash
   };
 
-  console.log("Frontend payload", payload);
+  console.log("Request:", payload);
   
   if (config.isLiveMode && config.webAppUrl) {
+    console.log("API URL:", config.webAppUrl);
+    console.log("Request Body:", JSON.stringify(payload));
+    
+    let response: Response;
     try {
-      const response = await fetchWithTracking(config.webAppUrl, {
+      response = await fetch(config.webAppUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload)
       });
-      if (!response.ok) {
-        console.log("Backend payload (HTTP error)", response.status);
-        console.log("Authentication result", "Backend connection failed");
-        return { success: false, error: "Backend connection failed" };
-      }
-      const data = await response.json();
-      console.log("Backend payload", data);
-      console.log("Authentication result", data.success ? "Success" : "Failed");
-      return data;
     } catch (err: any) {
-      console.error('GAS login error:', err);
-      console.log("Authentication result", "Backend connection failed");
-      return { success: false, error: "Backend connection failed" };
+      console.error('Fetch error:', err);
+      console.log("Authentication result", "Backend unreachable");
+      throw new Error("Backend unreachable");
     }
+
+    if (!response.ok) {
+      console.log("Response Status:", response.status);
+      console.log("Authentication result", "Backend unreachable");
+      throw new Error("Backend unreachable");
+    }
+
+    let responseText: string;
+    try {
+      responseText = await response.text();
+      console.log("Response:", responseText);
+    } catch (err: any) {
+      console.error('Response read error:', err);
+      console.log("Authentication result", "Invalid JSON");
+      throw new Error("Invalid JSON");
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch (err: any) {
+      console.error('JSON parsing error:', err);
+      console.log("Authentication result", "Invalid JSON");
+      throw new Error("Invalid JSON");
+    }
+
+    console.log("Backend payload", data);
+
+    if (!data || typeof data !== 'object') {
+      console.log("Authentication result", "Invalid JSON");
+      throw new Error("Invalid JSON");
+    }
+
+    if (!data.success) {
+      console.log("Authentication result", "Invalid credentials");
+      throw new Error(data.error || "Invalid credentials");
+    }
+
+    console.log("Authentication result", "Success");
+    return { success: true, user: data.user };
   }
 
   // Local/Offline Mode
   initLocalStorage();
-  const users: User[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
+  const users: any[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
   
+  const defaultHash = hashPassword('2026');
   // Auto-create default admin in local storage if no users exist
   if (users.length === 0 && loginIdClean.toLowerCase() === 'admin' && passwordClean === '2026') {
-    const defaultAdmin: User = {
+    const defaultAdmin: any = {
       id: 'USR-000001',
       fullName: 'Admin',
       loginId: 'admin',
-      password: '2026',
+      passwordHash: defaultHash,
       role: 'Admin',
       status: 'Active',
       createdAt: new Date().toISOString()
@@ -1122,20 +1163,24 @@ export async function loginUser(
     localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
   }
   
-  const user = users.find(u => u.loginId.toLowerCase().trim() === loginIdClean.toLowerCase() && u.password.trim() === passwordClean);
+  const user = users.find(u => {
+    const uHash = u.passwordHash || hashPassword(u.password || '');
+    return u.loginId.toLowerCase().trim() === loginIdClean.toLowerCase() && uHash === passwordHash;
+  });
+
   if (!user) {
     const userExists = users.some(u => u.loginId.toLowerCase().trim() === loginIdClean.toLowerCase());
     if (userExists) {
       console.log("Authentication result", "Password incorrect");
-      return { success: false, error: 'Password incorrect' };
+      throw new Error("Password incorrect");
     } else {
       console.log("Authentication result", "User not found");
-      return { success: false, error: 'User not found' };
+      throw new Error("User not found");
     }
   }
   if (user.status === 'Disabled') {
     console.log("Authentication result", "Account disabled");
-    return { success: false, error: 'Account disabled' };
+    throw new Error("Account disabled");
   }
   console.log("Authentication result", "Success");
   return { success: true, user };
@@ -1191,22 +1236,28 @@ export async function createUser(
   role: 'Admin' | 'Staff',
   status: 'Active' | 'Disabled'
 ): Promise<{ success: boolean; user?: User; error?: string }> {
+  const passwordHash = hashPassword(passwordPlain);
+  console.log("Password Hash:", passwordHash);
+
+  const payload = {
+    action: 'create_user',
+    fullName,
+    loginId,
+    passwordHash,
+    role,
+    status
+  };
+
+  console.log("Request:", payload);
+
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetchWithTracking(config.webAppUrl, {
+      const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        mode: 'cors',
         headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          action: 'create_user',
-          fullName,
-          loginId,
-          password: passwordPlain,
-          role,
-          status
-        })
+        body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error(`HTTP Status ${response.status}`);
       const data = await response.json();
@@ -1223,7 +1274,7 @@ export async function createUser(
 
   // Local Mode
   initLocalStorage();
-  const users: User[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
+  const users: any[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
   const exists = users.some(u => u.loginId.toLowerCase() === loginId.toLowerCase());
   if (exists) {
     return { success: false, error: 'A user with this Login ID already exists.' };
@@ -1239,11 +1290,11 @@ export async function createUser(
   }
   const userId = 'USR-' + String(nextNum).padStart(6, '0');
 
-  const newUser: User = {
+  const newUser: any = {
     id: userId,
     fullName,
     loginId,
-    password: passwordPlain,
+    passwordHash,
     role,
     status,
     createdAt: new Date().toISOString()
@@ -1263,35 +1314,43 @@ export async function updateUser(
   role: 'Admin' | 'Staff' = 'Staff',
   status: 'Active' | 'Disabled' = 'Active'
 ): Promise<{ success: boolean; error?: string }> {
+  const payload: any = {
+    action: 'update_user',
+    id,
+    fullName,
+    loginId,
+    role,
+    status
+  };
+
+  if (passwordPlain) {
+    const passwordHash = hashPassword(passwordPlain);
+    console.log("Password Hash:", passwordHash);
+    payload.passwordHash = passwordHash;
+  }
+
+  console.log("Request:", payload);
+
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetchWithTracking(config.webAppUrl, {
+      const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        mode: 'cors',
         headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          action: 'update_user',
-          id,
-          fullName,
-          loginId,
-          password: passwordPlain || undefined,
-          role,
-          status
-        })
+        body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error(`HTTP Status ${response.status}`);
       const data = await response.json();
       if (data.success) {
-        const localUsers: User[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
+        const localUsers: any[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
         const updated = localUsers.map(u => u.id === id ? { 
           ...u, 
           fullName, 
           loginId, 
           role, 
           status, 
-          ...(passwordPlain ? { password: passwordPlain } : {}) 
+          ...(passwordPlain ? { passwordHash: payload.passwordHash } : {}) 
         } : u);
         localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
       }
@@ -1303,7 +1362,7 @@ export async function updateUser(
 
   // Local Mode
   initLocalStorage();
-  const users: User[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
+  const users: any[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
   const exists = users.some(u => u.id !== id && u.loginId.toLowerCase() === loginId.toLowerCase());
   if (exists) {
     return { success: false, error: 'Another user with this Login ID already exists.' };
@@ -1315,7 +1374,7 @@ export async function updateUser(
     loginId,
     role,
     status,
-    ...(passwordPlain ? { password: passwordPlain } : {})
+    ...(passwordPlain ? { passwordHash: payload.passwordHash } : {})
   } : u);
   localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(updated));
   return { success: true };
@@ -1375,19 +1434,19 @@ export async function setupDefaultSheetsAndAdmin(
   adminLoginId: string,
   adminPasswordPlain: string
 ): Promise<{ success: boolean; error?: string }> {
+  const adminPasswordHash = hashPassword(adminPasswordPlain);
   if (config.isLiveMode && config.webAppUrl) {
     try {
-      const response = await fetchWithTracking(config.webAppUrl, {
+      const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        mode: 'cors',
         headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           action: 'setup_sheets',
           adminFullName,
           adminLoginId,
-          adminPassword: adminPasswordPlain
+          adminPasswordHash
         })
       });
       if (!response.ok) throw new Error(`HTTP Status ${response.status}`);
@@ -1400,14 +1459,14 @@ export async function setupDefaultSheetsAndAdmin(
 
   // Local Setup
   initLocalStorage();
-  const users: User[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
+  const users: any[] = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || '[]');
   const exists = users.some(u => u.loginId.toLowerCase() === adminLoginId.toLowerCase());
   if (!exists) {
-    const newUser: User = {
+    const newUser: any = {
       id: 'USR-000001',
       fullName: adminFullName,
       loginId: adminLoginId,
-      password: adminPasswordPlain,
+      passwordHash: adminPasswordHash,
       role: 'Admin',
       status: 'Active',
       createdAt: new Date().toISOString()
