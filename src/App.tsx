@@ -87,6 +87,7 @@ export default function App() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string>('');
   const [isAddingCustomerInline, setIsAddingCustomerInline] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
 
   // User Authentication & Wizard States
   const [sessionUser, setSessionUser] = useState<User | null>(null);
@@ -262,10 +263,13 @@ export default function App() {
     destinationCountry: string = '',
     source: string = 'Other',
     remarks: string = '',
-    imoNumber: string = ''
+    imoNumber: string = '',
+    customerCategory: string = '',
+    address: string = '',
+    gender: string = ''
   ) => {
     return wrapSave(async () => {
-      const res = await addCustomer(config, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber);
+      const res = await addCustomer(config, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber, customerCategory, address, gender);
       if (res.success && res.customer) {
         setCustomers(prev => [...prev, res.customer!]);
       }
@@ -282,10 +286,13 @@ export default function App() {
     destinationCountry: string = '',
     source: string = 'Other',
     remarks: string = '',
-    imoNumber: string = ''
+    imoNumber: string = '',
+    customerCategory: string = '',
+    address: string = '',
+    gender: string = ''
   ) => {
     return wrapSave(async () => {
-      const res = await updateCustomer(config, id, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber);
+      const res = await updateCustomer(config, id, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber, customerCategory, address, gender);
       if (res.success) {
         // Sync local customers state
         setCustomers(prev => prev.map(c => c.id === id ? { 
@@ -296,7 +303,10 @@ export default function App() {
           imoNumber,
           destinationCountry,
           source,
-          remarks
+          remarks,
+          customerCategory,
+          address,
+          gender
         } : c));
         // Sync local tickets cache
         setTickets(prev => prev.map(t => t.customerId === id ? { ...t, name, mobileNumber } : t));
@@ -312,7 +322,10 @@ export default function App() {
           imoNumber,
           destinationCountry,
           source,
-          remarks
+          remarks,
+          customerCategory,
+          address,
+          gender
         } : prev);
       }
       return res;
@@ -451,7 +464,16 @@ export default function App() {
     setSelectedCustomer(null);
     setPreselectedCustomerId('');
     setIsAddingCustomerInline(false);
+    setCategoryFilter('');
     setActiveTab(tab);
+  };
+
+  const handleCategorySelect = (category: string) => {
+    setSelectedCustomer(null);
+    setPreselectedCustomerId('');
+    setIsAddingCustomerInline(false);
+    setCategoryFilter(category);
+    setActiveTab('customers');
   };
 
   const handleLogout = () => {
@@ -684,6 +706,7 @@ export default function App() {
                   setActiveTab('tickets');
                 }}
                 currentUser={effectiveUser}
+                onCategorySelect={handleCategorySelect}
               />
             )}
 
@@ -702,7 +725,12 @@ export default function App() {
                   </div>
                   
                   <button
-                    onClick={() => setIsAddingCustomerInline(!isAddingCustomerInline)}
+                    onClick={() => {
+                      setIsAddingCustomerInline(!isAddingCustomerInline);
+                      if (!isAddingCustomerInline) {
+                        setCategoryFilter('');
+                      }
+                    }}
                     id="btn-toggle-add-customer"
                     className="inline-flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white text-xs font-medium px-4 py-2.5 rounded-full cursor-pointer transition-all shadow-sm active:scale-95"
                   >
@@ -725,6 +753,8 @@ export default function App() {
                     followUps={followUps}
                     onSelectCustomer={handleSelectCustomer}
                     onNavigateToAddCustomer={() => setIsAddingCustomerInline(true)}
+                    categoryFilter={categoryFilter}
+                    onCategoryFilterChange={setCategoryFilter}
                   />
                 )}
               </div>

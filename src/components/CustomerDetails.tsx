@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Customer, Ticket, TicketStatus, FollowUp } from '../types';
 import SmartContactActions from './SmartContactActions';
 import InlineCopy from './InlineCopy';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
   Phone, 
@@ -43,7 +44,10 @@ interface CustomerDetailsProps {
     destinationCountry?: string,
     source?: string,
     remarks?: string,
-    imoNumber?: string
+    imoNumber?: string,
+    customerCategory?: string,
+    address?: string,
+    gender?: string
   ) => Promise<{ success: boolean; error?: string }>;
   onDeleteCustomer: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -71,7 +75,7 @@ const SOURCES = [
   "Other"
 ];
 
-export default function CustomerDetails({
+const CustomerDetails = React.memo(function CustomerDetails({
   customer,
   tickets,
   followUps,
@@ -95,6 +99,79 @@ export default function CustomerDetails({
   const [isImoSameAsMobile, setIsImoSameAsMobile] = useState(customer.imoNumber === customer.mobileNumber && !!customer.imoNumber);
   const [editRemarks, setEditRemarks] = useState(customer.remarks || '');
   
+  // Category & Address
+  const CATEGORIES = [
+    'AGENT',
+    'SUPERVISOR (PRODUCTION)',
+    'SUPERVISOR (QUALITY)',
+    'IRON MAN',
+    'OPERATOR',
+    'CHECKER',
+    'DELICATOR'
+  ];
+  const [editCategory, setEditCategory] = useState(customer.customerCategory || '');
+  const [editGender, setEditGender] = useState(customer.gender || '');
+  
+  // If editCategory becomes blank, automatically hide and clear editGender
+  useEffect(() => {
+    if (!editCategory) {
+      setEditGender('');
+    }
+  }, [editCategory]);
+
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState(customer.customerCategory || '');
+  const [editAddress, setEditAddress] = useState(customer.address || '');
+  const [addressRows, setAddressRows] = useState(4);
+  const categoryDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Sync edit states when customer prop changes
+  useEffect(() => {
+    setEditName(customer.name);
+    setEditMobile(customer.mobileNumber);
+    setEditWhatsApp(customer.whatsAppNumber || '');
+    setIsSameAsMobile(customer.whatsAppNumber === customer.mobileNumber);
+    setEditImo(customer.imoNumber || '');
+    setIsImoSameAsMobile(customer.imoNumber === customer.mobileNumber && !!customer.imoNumber);
+    setEditRemarks(customer.remarks || '');
+    setEditCategory(customer.customerCategory || '');
+    setEditGender(customer.gender || '');
+    setCategorySearchQuery(customer.customerCategory || '');
+    setEditAddress(customer.address || '');
+  }, [customer]);
+
+  // Click outside category dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredCategories = React.useMemo(() => {
+    const q = categorySearchQuery.toLowerCase().trim();
+    if (!q) return CATEGORIES;
+    return CATEGORIES.filter(cat => cat.toLowerCase().includes(q));
+  }, [categorySearchQuery]);
+
+  useEffect(() => {
+    if (editCategory && !isCategoryDropdownOpen) {
+      setCategorySearchQuery(editCategory);
+    } else if (!editCategory && !isCategoryDropdownOpen) {
+      setCategorySearchQuery('');
+    }
+  }, [editCategory, isCategoryDropdownOpen]);
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setEditAddress(val);
+    const newlines = (val.match(/\n/g) || []).length;
+    setAddressRows(Math.min(8, Math.max(4, newlines + 1)));
+  };
+
   // Remarks Auto-Save Inline States
   const [remarksInput, setRemarksInput] = useState(customer.remarks || '');
   const [remarksSaveStatus, setRemarksSaveStatus] = useState<'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED'>('IDLE');
@@ -125,7 +202,10 @@ export default function CustomerDetails({
           customer.destinationCountry || '',
           customer.source || 'Other',
           remarksInput,
-          customer.imoNumber || ''
+          customer.imoNumber || '',
+          customer.customerCategory || '',
+          customer.address || '',
+          customer.gender || ''
         );
         if (res.success) {
           setRemarksSaveStatus('SAVED');
@@ -261,10 +341,13 @@ export default function CustomerDetails({
         trimmedName, 
         trimmedMobile,
         finalWhatsApp,
-        '',
-        'Other',
+        customer.destinationCountry || '',
+        customer.source || 'Other',
         finalRemarks,
-        finalImo
+        finalImo,
+        editCategory,
+        editAddress.trim(),
+        editGender
       );
       if (res.success) {
         setAlert({ type: 'success', message: 'Customer details updated successfully!' });
@@ -431,6 +514,107 @@ export default function CustomerDetails({
                   disabled={isImoSameAsMobile}
                 />
               </div>
+
+              {/* Category Dropdown */}
+              <div className="space-y-1.5 relative" ref={categoryDropdownRef}>
+                <label htmlFor="edit-category-search" className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Customer Category</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="edit-category-search"
+                    className="w-full text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all font-medium text-[#1F2937] placeholder-gray-400 uppercase"
+                    placeholder="SELECT CUSTOMER CATEGORY"
+                    value={categorySearchQuery}
+                    onChange={(e) => {
+                      setCategorySearchQuery(e.target.value);
+                      setIsCategoryDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsCategoryDropdownOpen(true)}
+                  />
+                  {categorySearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditCategory('');
+                        setCategorySearchQuery('');
+                      }}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      <span className="text-sm font-bold">&times;</span>
+                    </button>
+                  )}
+                </div>
+
+                {isCategoryDropdownOpen && (
+                  <div className="absolute z-50 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-[#1a1a15] border border-gray-200 rounded-xl shadow-lg divide-y divide-gray-100 w-full left-0 right-0">
+                    {filteredCategories.length > 0 ? (
+                      filteredCategories.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setEditCategory(cat);
+                            setCategorySearchQuery(cat);
+                            setIsCategoryDropdownOpen(false);
+                          }}
+                          className={`w-full text-left p-2.5 text-xs font-semibold transition-colors flex items-center justify-between hover:bg-gray-50 ${
+                            editCategory === cat ? 'bg-emerald-50 text-emerald-700' : 'text-[#1F2937]'
+                          }`}
+                        >
+                          <span className="uppercase">{cat}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-3 text-center text-xs text-gray-400 italic">
+                        No categories found matching query.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* DYNAMIC GENDER FIELD FOR EDITING */}
+              <div className="sm:col-span-1">
+                <AnimatePresence initial={false}>
+                  {editCategory && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: "auto", marginTop: 6 }}
+                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                      style={{ overflow: "hidden" }}
+                      id="edit-customer-gender-wrapper"
+                    >
+                      <div className="space-y-1.5">
+                        <label htmlFor="edit-gender-select" className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Gender (Optional)</label>
+                        <select
+                          id="edit-gender-select"
+                          className="w-full text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all font-bold uppercase cursor-pointer text-[#1F2937]"
+                          value={editGender}
+                          onChange={(e) => setEditGender(e.target.value)}
+                        >
+                          <option value="">SELECT GENDER</option>
+                          <option value="MALE">MALE</option>
+                          <option value="FEMALE">FEMALE</option>
+                        </select>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Address Area */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <label htmlFor="edit-address-textarea" className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Address (Optional)</label>
+                <textarea
+                  id="edit-address-textarea"
+                  rows={addressRows}
+                  className="w-full text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all font-medium text-[#1F2937]"
+                  placeholder="ENTER CUSTOMER ADDRESS"
+                  value={editAddress}
+                  onChange={handleAddressChange}
+                />
+              </div>
             </div>
 
             {/* Remarks */}
@@ -493,6 +677,21 @@ export default function CustomerDetails({
                       {customer.id}
                       <InlineCopy type="customerId" value={customer.id} className="min-w-[16px] min-h-[16px] p-0" />
                     </span>
+
+                    {customer.customerCategory && (
+                      <span className="inline-flex items-center font-mono text-[9px] font-bold px-2.5 py-0.5 rounded-md border bg-[#5A5A40]/10 text-[#5A5A40] border-[#5A5A40]/20 uppercase tracking-wide" id="profile-badge-category">
+                        {customer.customerCategory}
+                      </span>
+                    )}
+                    {customer.gender && (
+                      <span className={`inline-flex items-center font-mono text-[9px] font-bold px-2.5 py-0.5 rounded-md border uppercase tracking-wide ${
+                        customer.gender.toUpperCase() === 'MALE'
+                          ? 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/30'
+                          : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/30'
+                      }`} id="profile-badge-gender">
+                        {customer.gender}
+                      </span>
+                    )}
                   </div>
                   
                   <div className="flex flex-col sm:flex-row sm:items-center justify-center sm:justify-start gap-y-1.5 gap-x-4 text-xs text-gray-500 font-semibold">
@@ -588,6 +787,40 @@ export default function CustomerDetails({
                 )}
               </div>
             </div>
+
+            {/* Display Customer Category, Gender and Address if present */}
+            {(customer.customerCategory || customer.gender || customer.address) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+                {customer.customerCategory && (
+                  <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-[#5A5A40] block">Customer Category</span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#5A5A40]/10 text-[#5A5A40] border border-[#5A5A40]/20 uppercase">
+                      {customer.customerCategory}
+                    </span>
+                  </div>
+                )}
+                {customer.gender && (
+                  <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 block">Gender</span>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border uppercase ${
+                      customer.gender.toUpperCase() === 'MALE'
+                        ? 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/30'
+                        : 'bg-[#FDF2F8] dark:bg-[#500e2e]/20 text-[#D01C6D] dark:text-[#F472B6] border-[#FBCFE8] dark:border-[#9D174D]/30'
+                    }`}>
+                      {customer.gender}
+                    </span>
+                  </div>
+                )}
+                {customer.address && (
+                  <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5 sm:col-span-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 block">Address</span>
+                    <span className="text-xs font-medium text-gray-700 whitespace-pre-wrap uppercase leading-relaxed block">
+                      {customer.address}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Case Remarks Section with Inline Auto-Save */}
             <div className="p-5 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-2.5">
@@ -768,4 +1001,6 @@ export default function CustomerDetails({
 
     </div>
   );
-}
+});
+
+export default CustomerDetails;

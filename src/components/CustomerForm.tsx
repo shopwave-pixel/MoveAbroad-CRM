@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Customer } from '../types';
-import { AlignLeft } from 'lucide-react';
+import { AlignLeft, Search, MapPin } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Button, 
   Input, 
@@ -18,7 +19,10 @@ interface CustomerFormProps {
     destinationCountry?: string,
     source?: string,
     remarks?: string,
-    imoNumber?: string
+    imoNumber?: string,
+    customerCategory?: string,
+    address?: string,
+    gender?: string
   ) => Promise<{ success: boolean; customer?: Customer; error?: string }>;
   existingCustomers: Customer[];
 }
@@ -32,6 +36,59 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
   const [isImoSameAsMobile, setIsImoSameAsMobile] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [remarksRows, setRemarksRows] = useState(4);
+  
+  // Category & Address
+  const CATEGORIES = [
+    'AGENT',
+    'SUPERVISOR (PRODUCTION)',
+    'SUPERVISOR (QUALITY)',
+    'IRON MAN',
+    'OPERATOR',
+    'CHECKER',
+    'DELICATOR'
+  ];
+  const [customerCategory, setCustomerCategory] = useState('');
+  const [gender, setGender] = useState('');
+  
+  // If CUSTOMER CATEGORY becomes blank, automatically hide and clear GENDER
+  useEffect(() => {
+    if (!customerCategory) {
+      setGender('');
+    }
+  }, [customerCategory]);
+
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [address, setAddress] = useState('');
+  const [addressRows, setAddressRows] = useState(4);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredCategories = useMemo(() => {
+    const q = categorySearchQuery.toLowerCase().trim();
+    if (!q) return CATEGORIES;
+    return CATEGORIES.filter(cat => cat.toLowerCase().includes(q));
+  }, [categorySearchQuery]);
+
+  // Sync category search query when option is selected/changed
+  useEffect(() => {
+    if (customerCategory && !isCategoryDropdownOpen) {
+      setCategorySearchQuery(customerCategory);
+    } else if (!customerCategory && !isCategoryDropdownOpen) {
+      setCategorySearchQuery('');
+    }
+  }, [customerCategory, isCategoryDropdownOpen]);
   
   // Validation Errors
   const [nameError, setNameError] = useState('');
@@ -82,6 +139,17 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
     const newlines = (val.match(/\n/g) || []).length;
     const computedRows = Math.min(10, Math.max(4, newlines + 1));
     setRemarksRows(computedRows);
+  };
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setAddress(val);
+    if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
+
+    // Auto expand address row calculation up to 8 rows (min 4 rows)
+    const newlines = (val.match(/\n/g) || []).length;
+    const computedRows = Math.min(8, Math.max(4, newlines + 1));
+    setAddressRows(computedRows);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -138,7 +206,10 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
         '', // Destination country (defaulted)
         'Walk-in', // Source (defaulted)
         remarks.trim(),
-        formattedImo
+        formattedImo,
+        customerCategory,
+        address.trim(),
+        gender
       );
 
       if (result.success) {
@@ -156,6 +227,11 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
         setIsImoSameAsMobile(false);
         setRemarks('');
         setRemarksRows(4);
+        setCustomerCategory('');
+        setCategorySearchQuery('');
+        setAddress('');
+        setAddressRows(4);
+        setGender('');
 
         // Keep focus on Name field for next customer entry
         setTimeout(() => {
@@ -367,6 +443,134 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
               />
             </div>
           </div>
+        </div>
+
+        {/* Customer Category and Address (Optional fields added) */}
+        <div className="space-y-5">
+          {/* CUSTOMER CATEGORY Searchable Dropdown */}
+          <FormGroup
+            label="CUSTOMER CATEGORY (OPTIONAL)"
+            htmlFor="customer-category-search"
+          >
+            <div ref={categoryDropdownRef} className="relative w-full">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                  <Search className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  id="customer-category-search"
+                  name="customer-category-search"
+                  className="w-full text-xs pl-10 pr-8 py-3 bg-white dark:bg-[#20201a] border border-[#5A5A40]/20 dark:border-[#8a8a70]/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A5A40] text-[#1F2937] dark:text-[#ecece5] font-medium placeholder-gray-400 uppercase"
+                  placeholder="SELECT CUSTOMER CATEGORY"
+                  value={categorySearchQuery}
+                  onChange={(e) => {
+                    setCategorySearchQuery(e.target.value);
+                    setIsCategoryDropdownOpen(true);
+                  }}
+                  onFocus={() => setIsCategoryDropdownOpen(true)}
+                  disabled={status.type === 'loading'}
+                />
+                {categorySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerCategory('');
+                      setCategorySearchQuery('');
+                    }}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                  >
+                    <span className="text-sm font-bold">&times;</span>
+                  </button>
+                )}
+              </div>
+
+              {isCategoryDropdownOpen && (
+                <div className="absolute left-0 right-0 z-40 mt-1 max-h-52 overflow-y-auto bg-white dark:bg-[#1a1a15] border border-[#5A5A40]/15 dark:border-[#8a8a70]/25 rounded-xl shadow-lg divide-y divide-[#5A5A40]/10 dark:divide-[#8a8a70]/20">
+                  {filteredCategories.length > 0 ? (
+                    filteredCategories.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => {
+                          setCustomerCategory(cat);
+                          setCategorySearchQuery(cat);
+                          setIsCategoryDropdownOpen(false);
+                          if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
+                        }}
+                        className={`w-full text-left p-2.5 text-xs font-semibold transition-colors flex items-center justify-between hover:bg-[#5A5A40]/5 dark:hover:bg-[#8a8a70]/5 ${
+                          customerCategory === cat ? 'bg-[#5A5A40]/10 dark:bg-[#8a8a70]/10 text-primary-olive dark:text-white' : 'text-[#1F2937] dark:text-[#ecece5]'
+                        }`}
+                      >
+                        <span className="uppercase">{cat}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="p-3 text-center text-xs text-gray-400 dark:text-[#8a8a70] italic">
+                      No categories found matching query.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </FormGroup>
+
+          {/* DYNAMIC GENDER FIELD */}
+          <AnimatePresence initial={false}>
+            {customerCategory && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                animate={{ opacity: 1, height: "auto", marginTop: 12 }}
+                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+                style={{ overflow: "hidden" }}
+                id="customer-gender-wrapper"
+              >
+                <FormGroup
+                  label="GENDER (OPTIONAL)"
+                  htmlFor="customer-gender"
+                >
+                  <select
+                    id="customer-gender"
+                    name="customer-gender"
+                    className="w-full text-xs bg-[#F8FAFC] dark:bg-[#151510]/50 border border-gray-200 dark:border-[#8a8a70]/30 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-accent-blue/20 focus:border-accent-blue text-[#1F2937] dark:text-[#ecece5] font-bold uppercase cursor-pointer"
+                    value={gender}
+                    onChange={(e) => {
+                      setGender(e.target.value);
+                      if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
+                    }}
+                    disabled={status.type === 'loading'}
+                  >
+                    <option value="">SELECT GENDER</option>
+                    <option value="MALE">MALE</option>
+                    <option value="FEMALE">FEMALE</option>
+                  </select>
+                </FormGroup>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ADDRESS Field */}
+          <FormGroup
+            label="ADDRESS (OPTIONAL)"
+            htmlFor="customer-address"
+          >
+            <div className="relative">
+              <div className="absolute top-3.5 left-3.5 pointer-events-none text-gray-400">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <TextArea
+                id="customer-address"
+                name="customer-address"
+                rows={addressRows}
+                className="pl-10"
+                placeholder="ENTER CUSTOMER ADDRESS"
+                value={address}
+                onChange={handleAddressChange}
+                disabled={status.type === 'loading'}
+              />
+            </div>
+          </FormGroup>
         </div>
 
         {/* Remarks Field (Customer Notes) */}

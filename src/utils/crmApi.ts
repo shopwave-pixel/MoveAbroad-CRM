@@ -315,7 +315,10 @@ export async function addCustomer(
   destinationCountry: string = '',
   source: string = 'Other',
   remarks: string = '',
-  imoNumber: string = ''
+  imoNumber: string = '',
+  customerCategory: string = '',
+  address: string = '',
+  gender: string = ''
 ): Promise<{ success: boolean; customer?: Customer; error?: string }> {
   const trimmedName = name.trim();
   const trimmedMobile = mobileNumber.trim();
@@ -336,7 +339,10 @@ export async function addCustomer(
           destinationCountry: destinationCountry.trim(),
           source: source,
           remarks: remarks.trim(),
-          imoNumber: imoNumber.trim()
+          imoNumber: imoNumber.trim(),
+          customerCategory: customerCategory.trim(),
+          address: address.trim(),
+          gender: gender.trim()
         })
       });
 
@@ -390,7 +396,10 @@ export async function addCustomer(
     destinationCountry: destinationCountry.trim(),
     source: source,
     remarks: remarks.trim(),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    customerCategory: customerCategory.trim(),
+    address: address.trim(),
+    gender: gender.trim()
   };
 
   customers.push(newCustomer);
@@ -409,7 +418,10 @@ export async function updateCustomer(
   destinationCountry: string = '',
   source: string = 'Other',
   remarks: string = '',
-  imoNumber: string = ''
+  imoNumber: string = '',
+  customerCategory: string = '',
+  address: string = '',
+  gender: string = ''
 ): Promise<{ success: boolean; error?: string }> {
   const trimmedName = name.trim();
   const trimmedMobile = mobileNumber.trim();
@@ -431,7 +443,10 @@ export async function updateCustomer(
           destinationCountry: destinationCountry.trim(),
           source: source,
           remarks: remarks.trim(),
-          imoNumber: imoNumber.trim()
+          imoNumber: imoNumber.trim(),
+          customerCategory: customerCategory.trim(),
+          address: address.trim(),
+          gender: gender.trim()
         })
       });
 
@@ -451,7 +466,10 @@ export async function updateCustomer(
           imoNumber: imoNumber.trim(),
           destinationCountry: destinationCountry.trim(),
           source: source,
-          remarks: remarks.trim()
+          remarks: remarks.trim(),
+          customerCategory: customerCategory.trim(),
+          address: address.trim(),
+          gender: gender.trim()
         } : c);
         localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(updatedCustomers));
 
@@ -492,7 +510,10 @@ export async function updateCustomer(
     imoNumber: imoNumber.trim(),
     destinationCountry: destinationCountry.trim(),
     source: source,
-    remarks: remarks.trim()
+    remarks: remarks.trim(),
+    customerCategory: customerCategory.trim(),
+    address: address.trim(),
+    gender: gender.trim()
   } : c);
   localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(updatedCustomers));
 

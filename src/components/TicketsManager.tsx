@@ -60,7 +60,7 @@ interface TicketsManagerProps {
   preselectedCustomerId?: string;
 }
 
-export default function TicketsManager({
+const TicketsManager = React.memo(function TicketsManager({
   customers,
   tickets,
   followUps,
@@ -126,6 +126,12 @@ export default function TicketsManager({
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | TicketStatus>('All');
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  // Reset pagination when filter or search changes
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [searchQuery, statusFilter, ticketSearchInput]);
 
   // Edit / Action States
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -314,6 +320,10 @@ export default function TicketsManager({
       );
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Newest first
+
+  const visibleTickets = React.useMemo(() => {
+    return filteredTickets.slice(0, visibleCount);
+  }, [filteredTickets, visibleCount]);
 
   const formatDateTime = (isoString: string) => {
     try {
@@ -893,152 +903,166 @@ export default function TicketsManager({
 
           {/* Table / List representation */}
           <div className="space-y-3.5" id="ticket-items-feed">
-            {filteredTickets.length > 0 ? (
-              filteredTickets.map(t => {
-                const isEditing = editingId === t.id;
-                const isConfirmDeleting = deletingId === t.id;
+            {visibleTickets.length > 0 ? (
+              <>
+                {visibleTickets.map(t => {
+                  const isEditing = editingId === t.id;
+                  const isConfirmDeleting = deletingId === t.id;
 
-                let badgeStyle = '';
-                if (t.status === 'Open') badgeStyle = 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/20';
-                else badgeStyle = 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20';
+                  let badgeStyle = '';
+                  if (t.status === 'Open') badgeStyle = 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/20';
+                  else badgeStyle = 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20';
 
-                return (
-                  <div
-                    key={t.id}
-                    id={`ticket-card-${t.id}`}
-                    className="bg-white dark:bg-[#20201a] p-5 rounded-[20px] border border-[#E5E7EB] dark:border-[#8a8a70]/20 border-t-4 border-t-[#3B82F6] shadow-sm space-y-3 hover:-translate-y-1 hover:shadow-md transition-all duration-200"
-                  >
-                    
-                    {/* Header line of card */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-0.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <h4 className="font-serif font-bold text-sm text-[#1F2937] dark:text-[#ecece5] uppercase">{t.name}</h4>
-                          <InlineCopy type="name" value={t.name} className="min-w-[24px] min-h-[24px] p-0.5" />
-                          
-                          <span className="inline-flex items-center gap-1 font-mono text-[9px] font-bold text-gray-500 bg-gray-100 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
-                            {t.id}
-                            <InlineCopy type="ticketId" value={t.id} className="min-w-[20px] min-h-[20px] p-0" />
-                          </span>
+                  return (
+                    <div
+                      key={t.id}
+                      id={`ticket-card-${t.id}`}
+                      className="bg-white dark:bg-[#20201a] p-5 rounded-[20px] border border-[#E5E7EB] dark:border-[#8a8a70]/20 border-t-4 border-t-[#3B82F6] shadow-sm space-y-3 hover:-translate-y-1 hover:shadow-md transition-all duration-200"
+                    >
+                      
+                      {/* Header line of card */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <h4 className="font-serif font-bold text-sm text-[#1F2937] dark:text-[#ecece5] uppercase">{t.name}</h4>
+                            <InlineCopy type="name" value={t.name} className="min-w-[24px] min-h-[24px] p-0.5" />
+                            
+                            <span className="inline-flex items-center gap-1 font-mono text-[9px] font-bold text-gray-500 bg-gray-100 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
+                              {t.id}
+                              <InlineCopy type="ticketId" value={t.id} className="min-w-[20px] min-h-[20px] p-0" />
+                            </span>
 
-                          <span className="inline-flex items-center gap-1 font-mono text-[9px] font-bold text-gray-400 bg-gray-50 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
-                            CID: {t.customerId}
-                            <InlineCopy type="customerId" value={t.customerId} className="min-w-[20px] min-h-[20px] p-0" />
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 text-[10px] text-[#6B7280] dark:text-[#8a8a70]/80">
-                          <Phone className="w-3 h-3 text-[#5A5A40]/30" />
-                          <span className="font-semibold">{t.mobileNumber}</span>
-                          <InlineCopy type="mobile" value={t.mobileNumber} className="min-w-[24px] min-h-[24px] p-0.5" />
-                        </div>
-                      </div>
-
-                      {/* Status select toggle or badge */}
-                      {isEditing ? (
-                        <div className="flex gap-1">
-                          {(['Open', 'Closed'] as TicketStatus[]).map(st => {
-                            let selectStyle = 'bg-white dark:bg-[#20201a] text-[#2c2c26]/60 dark:text-[#8a8a70] border-black/10 dark:border-white/10';
-                            if (editStatus === st) {
-                              if (st === 'Open') selectStyle = 'bg-[#22C55E] text-white border-[#22C55E]';
-                              if (st === 'Closed') selectStyle = 'bg-[#EF4444] text-white border-[#EF4444]';
-                            }
-                            return (
-                              <button
-                                key={st}
-                                type="button"
-                                onClick={() => setEditStatus(st)}
-                                className={`text-[9px] font-bold px-2 py-1 rounded-md border transition-colors cursor-pointer ${selectStyle}`}
-                              >
-                                {st}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex items-center gap-1 shrink-0 ${badgeStyle}`}>
-                          {t.status === 'Open' && <Clock className="w-3 h-3 shrink-0" />}
-                          {t.status}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Description Notes Text */}
-                    <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
-                      {isEditing ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase">EDIT CONVERSATION DESCRIPTION</span>
-                            <span className="text-[9px] font-bold uppercase tracking-wider">
-                              {ticketSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
-                              {ticketSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
-                              {ticketSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
-                              {ticketSaveStatus === 'FAILED' && <span className="text-red-500 animate-bounce">❌ SAVE FAILED</span>}
+                            <span className="inline-flex items-center gap-1 font-mono text-[9px] font-bold text-gray-400 bg-gray-50 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
+                              CID: {t.customerId}
+                              <InlineCopy type="customerId" value={t.customerId} className="min-w-[20px] min-h-[20px] p-0" />
                             </span>
                           </div>
-                          <textarea
-                            className="w-full text-xs bg-white border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-gray-800 font-sans"
-                            rows={3}
-                            value={editDescription}
-                            onChange={(e) => setEditDescription(e.target.value)}
-                            placeholder="Type ticket logs or notes here. Autosaves as you type..."
-                          />
-                          <div className="flex items-center gap-2 justify-end">
-                            <button
-                              onClick={() => setEditingId(null)}
-                              className="px-4 py-1.5 text-[10px] font-bold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-md cursor-pointer uppercase transition-colors"
-                            >
-                              Done Editing
-                            </button>
+                          <div className="flex items-center gap-1 text-[10px] text-[#6B7280] dark:text-[#8a8a70]/80">
+                            <Phone className="w-3 h-3 text-[#5A5A40]/30" />
+                            <span className="font-semibold">{t.mobileNumber}</span>
+                            <InlineCopy type="mobile" value={t.mobileNumber} className="min-w-[24px] min-h-[24px] p-0.5" />
                           </div>
                         </div>
-                      ) : (
-                        <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed break-words font-sans">
-                          {t.conversationDescription}
-                        </p>
-                      )}
-                    </div>
 
-                    {(() => {
-                      const customer = customers.find(c => c.id === t.customerId);
-                      if (!customer) return null;
-                      return (
-                        <div className="pt-1 flex justify-end">
-                          <SmartContactActions
-                            customerName={customer.name}
-                            mobileNumber={customer.mobileNumber}
-                            whatsAppNumber={customer.whatsAppNumber}
-                            imoNumber={customer.imoNumber}
-                            customerId={customer.id}
-                            ticketId={t.id}
-                          />
-                        </div>
-                      );
-                    })()}
-
-                    {/* Card Actions Footer */}
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-[9px] text-gray-400 uppercase tracking-wider font-bold font-sans">
-                      <span>Opened: {formatDateTime(t.createdAt)}</span>
-                      
-                      <div className="flex items-center gap-1.5">
-                        {t.status === 'Open' && !isEditing && (
-                          <button
-                            onClick={() => {
-                              setEditingId(t.id);
-                              setEditDescription(t.conversationDescription);
-                              setEditStatus(t.status);
-                            }}
-                            className="p-1.5 hover:bg-blue-50 text-[#3B82F6] rounded-lg border border-gray-100 active:scale-95 transition-all cursor-pointer"
-                            title="Edit Ticket Description / Status"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                        {/* Status select toggle or badge */}
+                        {isEditing ? (
+                          <div className="flex gap-1">
+                            {(['Open', 'Closed'] as TicketStatus[]).map(st => {
+                              let selectStyle = 'bg-white dark:bg-[#20201a] text-[#2c2c26]/60 dark:text-[#8a8a70] border-black/10 dark:border-white/10';
+                              if (editStatus === st) {
+                                if (st === 'Open') selectStyle = 'bg-[#22C55E] text-white border-[#22C55E]';
+                                if (st === 'Closed') selectStyle = 'bg-[#EF4444] text-white border-[#EF4444]';
+                              }
+                              return (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => setEditStatus(st)}
+                                  className={`text-[9px] font-bold px-2 py-1 rounded-md border transition-colors cursor-pointer ${selectStyle}`}
+                                >
+                                  {st}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex items-center gap-1 shrink-0 ${badgeStyle}`}>
+                            {t.status === 'Open' && <Clock className="w-3 h-3 shrink-0" />}
+                            {t.status}
+                          </span>
                         )}
                       </div>
-                    </div>
 
+                      {/* Description Notes Text */}
+                      <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase">EDIT CONVERSATION DESCRIPTION</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider">
+                                {ticketSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
+                                {ticketSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
+                                {ticketSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
+                                {ticketSaveStatus === 'FAILED' && <span className="text-red-500 animate-bounce">❌ SAVE FAILED</span>}
+                              </span>
+                            </div>
+                            <textarea
+                              className="w-full text-xs bg-white border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-gray-800 font-sans"
+                              rows={3}
+                              value={editDescription}
+                              onChange={(e) => setEditDescription(e.target.value)}
+                              placeholder="Type ticket logs or notes here. Autosaves as you type..."
+                            />
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                onClick={() => setEditingId(null)}
+                                className="px-4 py-1.5 text-[10px] font-bold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-md cursor-pointer uppercase transition-colors"
+                              >
+                                Done Editing
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed break-words font-sans">
+                            {t.conversationDescription}
+                          </p>
+                        )}
+                      </div>
+
+                      {(() => {
+                        const customer = customers.find(c => c.id === t.customerId);
+                        if (!customer) return null;
+                        return (
+                          <div className="pt-1 flex justify-end">
+                            <SmartContactActions
+                              customerName={customer.name}
+                              mobileNumber={customer.mobileNumber}
+                              whatsAppNumber={customer.whatsAppNumber}
+                              imoNumber={customer.imoNumber}
+                              customerId={customer.id}
+                              ticketId={t.id}
+                            />
+                          </div>
+                        );
+                      })()}
+
+                      {/* Card Actions Footer */}
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-[9px] text-gray-400 uppercase tracking-wider font-bold font-sans">
+                        <span>Opened: {formatDateTime(t.createdAt)}</span>
+                        
+                        <div className="flex items-center gap-1.5">
+                          {t.status === 'Open' && !isEditing && (
+                            <button
+                              onClick={() => {
+                                setEditingId(t.id);
+                                setEditDescription(t.conversationDescription);
+                                setEditStatus(t.status);
+                              }}
+                              className="p-1.5 hover:bg-blue-50 text-[#3B82F6] rounded-lg border border-gray-100 active:scale-95 transition-all cursor-pointer"
+                              title="Edit Ticket Description / Status"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
+
+                {filteredTickets.length > visibleCount && (
+                  <div className="flex justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount(prev => prev + 20)}
+                      className="px-6 py-2.5 text-xs font-bold rounded-full bg-[#3B82F6] text-white hover:bg-[#2563EB] transition-all cursor-pointer shadow-sm uppercase tracking-wider animate-fade-in"
+                    >
+                      Show More Tickets (showing {visibleCount} of {filteredTickets.length})
+                    </button>
                   </div>
-                );
-              })
+                )}
+              </>
             ) : (
               <div className="bg-white rounded-[20px] border border-gray-200 p-12 text-center space-y-4 shadow-xs" id="tickets-empty-state">
                 <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-gray-400">
@@ -1070,4 +1094,6 @@ export default function TicketsManager({
 
     </div>
   );
-}
+});
+
+export default TicketsManager;

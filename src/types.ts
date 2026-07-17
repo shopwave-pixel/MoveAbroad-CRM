@@ -8,6 +8,9 @@ export interface Customer {
   source?: string; // Facebook, Walk-in, Reference, Website, Other
   remarks?: string;
   createdAt: string;
+  customerCategory?: string;
+  address?: string;
+  gender?: string;
 }
 
 export type TicketStatus = 'Open' | 'Closed';

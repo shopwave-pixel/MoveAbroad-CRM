@@ -359,6 +359,9 @@ function doPost(e) {
       const destinationCountry = (payload.destinationCountry || '').trim();
       const source = (payload.source || 'Other').trim();
       const remarks = (payload.remarks || '').trim();
+      const customerCategory = (payload.customerCategory || '').trim();
+      const address = (payload.address || '').trim();
+      const gender = (payload.gender || '').trim();
       
       if (!name || !mobileNumber) {
         return jsonResponse({ success: false, error: "Customer name and mobile number are required." });
@@ -389,7 +392,10 @@ function doPost(e) {
         destinationCountry, 
         source, 
         remarks, 
-        createdAt
+        createdAt,
+        customerCategory,
+        address,
+        gender
       ]);
       
       const newCustomer = {
@@ -400,7 +406,10 @@ function doPost(e) {
         destinationCountry: destinationCountry,
         source: source,
         remarks: remarks,
-        createdAt: createdAt
+        createdAt: createdAt,
+        customerCategory: customerCategory,
+        address: address,
+        gender: gender
       };
       
       return jsonResponse({
@@ -418,6 +427,9 @@ function doPost(e) {
       const destinationCountry = (payload.destinationCountry || '').trim();
       const source = (payload.source || 'Other').trim();
       const remarks = (payload.remarks || '').trim();
+      const customerCategory = (payload.customerCategory || '').trim();
+      const address = (payload.address || '').trim();
+      const gender = (payload.gender || '').trim();
       
       if (!id || !name || !mobileNumber) {
         return jsonResponse({ success: false, error: "ID, Customer Name and Mobile Number are required." });
@@ -435,7 +447,10 @@ function doPost(e) {
         "WhatsApp Number": whatsAppNumber,
         "Destination Country": destinationCountry,
         "Source": source,
-        "Remarks": remarks
+        "Remarks": remarks,
+        "Customer Category": customerCategory,
+        "Address": address,
+        "Gender": gender
       });
 
       if (updated) {
@@ -710,9 +725,12 @@ function setupSheets() {
       "Destination Country", 
       "Source", 
       "Remarks", 
-      "Created At"
+      "Created At",
+      "Customer Category",
+      "Address",
+      "Gender"
     ]);
-    customersSheet.getRange("A1:H1").setFontWeight("bold");
+    customersSheet.getRange("A1:K1").setFontWeight("bold");
   }
   
   let ticketsSheet = ss.getSheetByName("Tickets");
@@ -786,7 +804,10 @@ function getCustomers(sheet) {
     destinationCountry: String(row[4] || ''),
     source: String(row[5] || 'Other'),
     remarks: String(row[6] || ''),
-    createdAt: String(row[7])
+    createdAt: String(row[7]),
+    customerCategory: String(row[8] || ''),
+    address: String(row[9] || ''),
+    gender: String(row[10] || '')
   }));
 }
 

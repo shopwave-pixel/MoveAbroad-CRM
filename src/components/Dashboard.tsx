@@ -33,9 +33,10 @@ interface DashboardProps {
   onQuickAddTicket: () => void;
   onQuickAddCustomer: () => void;
   currentUser?: User | null;
+  onCategorySelect?: (category: string) => void;
 }
 
-export default function Dashboard({
+const Dashboard = React.memo(function Dashboard({
   customers,
   tickets,
   followUps,
@@ -43,7 +44,8 @@ export default function Dashboard({
   onSelectCustomer,
   onQuickAddTicket,
   onQuickAddCustomer,
-  currentUser
+  currentUser,
+  onCategorySelect
 }: DashboardProps) {
   
   const todayStr = new Date().toISOString().split('T')[0];
@@ -87,6 +89,37 @@ export default function Dashboard({
   const closedTicketsCount = tickets.filter(t => t.status === 'Closed').length;
   const pendingFollowUpsCount = followUps.filter(f => f.status === 'Pending').length;
   const todaysFollowUpsCount = followUps.filter(f => f.status === 'Pending' && f.followUpDate === todayStr).length;
+
+  // Dynamic calculation for Category statistics of ACTIVE customers (at least one non-closed ticket)
+  const categoryActiveCounts = useMemo(() => {
+    const activeCustomerIds = new Set<string>();
+    tickets.forEach(t => {
+      if (t.status !== 'Closed') {
+        activeCustomerIds.add(t.customerId);
+      }
+    });
+
+    const counts: Record<string, number> = {
+      'AGENT': 0,
+      'SUPERVISOR (PRODUCTION)': 0,
+      'SUPERVISOR (QUALITY)': 0,
+      'IRON MAN': 0,
+      'OPERATOR': 0,
+      'CHECKER': 0,
+      'DELICATOR': 0
+    };
+
+    customers.forEach(c => {
+      if (c.customerCategory) {
+        const catUpper = c.customerCategory.toUpperCase();
+        if (catUpper in counts && activeCustomerIds.has(c.id)) {
+          counts[catUpper]++;
+        }
+      }
+    });
+
+    return counts;
+  }, [customers, tickets]);
 
   // Let's sort activities and events for the Vertical Timeline
   const timelineEvents = useMemo(() => {
@@ -414,6 +447,61 @@ export default function Dashboard({
             <p className="text-[8px] text-[#6B7280] font-semibold mt-1 uppercase">Status Verified</p>
           </div>
 
+        </div>
+      </div>
+
+      {/* 3.5. Customer Category Statistics Bento Grid */}
+      <div className="space-y-4" id="customer-category-statistics-section">
+        <div className="flex items-center gap-3">
+          <div className="w-1.5 h-6 rounded-full bg-[#10B981]" />
+          <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-sm tracking-tight uppercase">
+            CUSTOMER CATEGORY STATISTICS
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="category-stats-widgets-grid">
+          {Object.entries(categoryActiveCounts).map(([cat, count]) => {
+            let colorClasses = "";
+            
+            if (cat === 'AGENT') {
+              colorClasses = "from-emerald-500/10 to-emerald-600/5 border-t-[#10B981] text-[#10B981]";
+            } else if (cat.includes('PRODUCTION')) {
+              colorClasses = "from-blue-500/10 to-blue-600/5 border-t-[#3B82F6] text-[#3B82F6]";
+            } else if (cat.includes('QUALITY')) {
+              colorClasses = "from-purple-500/10 to-purple-600/5 border-t-[#8B5CF6] text-[#8B5CF6]";
+            } else if (cat === 'IRON MAN') {
+              colorClasses = "from-amber-500/10 to-amber-600/5 border-t-[#F59E0B] text-[#F59E0B]";
+            } else if (cat === 'OPERATOR') {
+              colorClasses = "from-cyan-500/10 to-cyan-600/5 border-t-[#06B6D4] text-[#06B6D4]";
+            } else if (cat === 'CHECKER') {
+              colorClasses = "from-rose-500/10 to-rose-600/5 border-t-[#EF4444] text-[#EF4444]";
+            } else {
+              colorClasses = "from-teal-500/10 to-teal-600/5 border-t-[#14B8A6] text-[#14B8A6]";
+            }
+
+            return (
+              <div
+                key={cat}
+                onClick={() => onCategorySelect?.(cat)}
+                className={`group relative overflow-hidden bg-gradient-to-br border-t-4 p-5 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer ${colorClasses}`}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-wider text-gray-500 truncate mb-1">
+                  {cat}
+                </p>
+                <div className="flex items-baseline gap-1.5 mt-2">
+                  <span className="text-2xl font-serif font-bold text-[#1F2937]">
+                    {count}
+                  </span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider opacity-90">
+                    ACTIVE
+                  </span>
+                </div>
+                <div className="absolute bottom-3 right-4 opacity-5 group-hover:opacity-15 transition-opacity">
+                  <Users className="w-12 h-12" />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -879,4 +967,6 @@ export default function Dashboard({
 
     </div>
   );
-}
+});
+
+export default Dashboard;

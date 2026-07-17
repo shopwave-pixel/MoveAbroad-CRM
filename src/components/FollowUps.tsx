@@ -42,7 +42,7 @@ interface FollowUpsProps {
 
 type FilterTab = 'today' | 'upcoming' | 'completed';
 
-export default function FollowUps({
+const FollowUps = React.memo(function FollowUps({
   customers,
   followUps,
   tickets,
@@ -52,6 +52,12 @@ export default function FollowUps({
 }: FollowUpsProps) {
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<FilterTab>('today');
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  // Reset pagination when activeTab changes
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [activeTab]);
   
   // Create state
   const [isAdding, setIsAdding] = useState(false);
@@ -145,6 +151,10 @@ export default function FollowUps({
     const dateB = `${b.followUpDate}T${b.followUpTime}`;
     return new Date(dateA).getTime() - new Date(dateB).getTime();
   });
+
+  const visibleFollowUps = React.useMemo(() => {
+    return filteredFollowUps.slice(0, visibleCount);
+  }, [filteredFollowUps, visibleCount]);
 
   // Action helpers
   const handleCreate = async (e: React.FormEvent) => {
@@ -565,218 +575,232 @@ export default function FollowUps({
 
         {/* List of Tasks */}
         <div className="space-y-3.5" id="followups-list">
-          {filteredFollowUps.length > 0 ? (
-            filteredFollowUps.map(f => {
-              const isEditing = editingId === f.id;
-              const isRescheduling = reschedulingId === f.id;
-              const isConfirmDeleting = deletingId === f.id;
-              const overdue = isFollowUpOverdue(f);
+          {visibleFollowUps.length > 0 ? (
+            <>
+              {visibleFollowUps.map(f => {
+                const isEditing = editingId === f.id;
+                const isRescheduling = reschedulingId === f.id;
+                const isConfirmDeleting = deletingId === f.id;
+                const overdue = isFollowUpOverdue(f);
 
-              // Set the color based on the strict status tags rules
-              let statusBadgeStyle = '';
-              if (f.status === 'Completed') {
-                statusBadgeStyle = 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/20';
-              } else if (overdue) {
-                statusBadgeStyle = 'bg-[#DC2626]/10 text-[#DC2626] border-[#DC2626]/20 font-bold';
-              } else {
-                // Pending (Orange #F97316)
-                statusBadgeStyle = 'bg-[#F97316]/10 text-[#F97316] border-[#F97316]/20';
-              }
+                // Set the color based on the strict status tags rules
+                let statusBadgeStyle = '';
+                if (f.status === 'Completed') {
+                  statusBadgeStyle = 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/20';
+                } else if (overdue) {
+                  statusBadgeStyle = 'bg-[#DC2626]/10 text-[#DC2626] border-[#DC2626]/20 font-bold';
+                } else {
+                  // Pending (Orange #F97316)
+                  statusBadgeStyle = 'bg-[#F97316]/10 text-[#F97316] border-[#F97316]/20';
+                }
 
-              return (
-                <div
-                  key={f.id}
-                  id={`followup-card-${f.id}`}
-                  className={`bg-white dark:bg-[#20201a] p-5 rounded-[20px] border border-[#E5E7EB] dark:border-[#8a8a70]/20 border-t-4 border-t-[#8B5CF6] transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${
-                    f.status === 'Completed' 
-                      ? 'opacity-75' 
-                      : overdue
-                        ? 'bg-rose-50/10'
-                        : f.followUpDate === todayStr 
-                          ? 'bg-[#F97316]/5' 
-                          : ''
-                  }`}
-                >
-                  <div className="space-y-3">
-                    
-                    {/* Top Row: Info Header */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <h4 className="font-serif font-bold text-sm text-[#1F2937] dark:text-[#ecece5] uppercase" id={`followup-name-${f.id}`}>{f.name}</h4>
-                          <InlineCopy type="name" value={f.name} className="min-w-[24px] min-h-[24px] p-0.5" />
-                          <span className="font-mono text-[8px] font-bold text-gray-500 bg-gray-100 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
-                            CID: {f.customerId}
-                          </span>
-                          <InlineCopy type="customerId" value={f.customerId} className="min-w-[20px] min-h-[20px] p-0" />
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-[#5A5A40]/75 dark:text-[#8a8a70]">
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-3.5 h-3.5 text-[#5A5A40]/40" />
-                            <a href={`tel:${f.mobileNumber}`} className="hover:underline text-[#5A5A40] dark:text-[#b8b89e] font-semibold">{f.mobileNumber}</a>
-                            <InlineCopy type="mobile" value={f.mobileNumber} className="min-w-[24px] min-h-[24px] p-0.5" />
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1.5 text-right font-mono text-[10px]">
-                        <span className="inline-flex items-center gap-1 font-bold text-[#5A5A40] dark:text-[#ecece5] bg-[#f5f5f0] dark:bg-[#151510] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 px-1.5 py-0.5 rounded-md shrink-0">
-                          {f.id}
-                          <InlineCopy type="ticketId" value={f.id} className="min-w-[20px] min-h-[20px] p-0" />
-                        </span>
-                        
-                        {/* Date and Time values with exact colors */}
-                        <span className={`inline-flex items-center gap-1 font-bold border px-1.5 py-0.5 rounded-md ${statusBadgeStyle}`}>
-                          <Calendar className="w-3 h-3" />
-                          {overdue ? 'OVERDUE: ' : ''}{getRelativeDateLabel(f.followUpDate)} @ {f.followUpTime}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Notes Area */}
-                    <div className="bg-[#f5f5f0]/45 dark:bg-[#151510]/40 p-3 rounded-xl border border-[#5A5A40]/5 dark:border-[#8a8a70]/10">
-                      {isEditing ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-[#5A5A40]/60 uppercase">EDIT FOLLOW-UP NOTES</span>
-                            <span className="text-[9px] font-bold uppercase tracking-wider">
-                              {followupSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
-                              {followupSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
-                              {followupSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
-                              {followupSaveStatus === 'FAILED' && <span className="text-red-500 animate-bounce">❌ SAVE FAILED</span>}
+                return (
+                  <div
+                    key={f.id}
+                    id={`followup-card-${f.id}`}
+                    className={`bg-white dark:bg-[#20201a] p-5 rounded-[20px] border border-[#E5E7EB] dark:border-[#8a8a70]/20 border-t-4 border-t-[#8B5CF6] transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${
+                      f.status === 'Completed' 
+                        ? 'opacity-75' 
+                        : overdue
+                          ? 'bg-rose-50/10'
+                          : f.followUpDate === todayStr 
+                            ? 'bg-[#F97316]/5' 
+                            : ''
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      
+                      {/* Top Row: Info Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <h4 className="font-serif font-bold text-sm text-[#1F2937] dark:text-[#ecece5] uppercase" id={`followup-name-${f.id}`}>{f.name}</h4>
+                            <InlineCopy type="name" value={f.name} className="min-w-[24px] min-h-[24px] p-0.5" />
+                            <span className="font-mono text-[8px] font-bold text-gray-500 bg-gray-100 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
+                              CID: {f.customerId}
+                            </span>
+                            <InlineCopy type="customerId" value={f.customerId} className="min-w-[20px] min-h-[20px] p-0" />
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-[#5A5A40]/75 dark:text-[#8a8a70]">
+                            <span className="flex items-center gap-1">
+                              <Phone className="w-3.5 h-3.5 text-[#5A5A40]/40" />
+                              <a href={`tel:${f.mobileNumber}`} className="hover:underline text-[#5A5A40] dark:text-[#b8b89e] font-semibold">{f.mobileNumber}</a>
+                              <InlineCopy type="mobile" value={f.mobileNumber} className="min-w-[24px] min-h-[24px] p-0.5" />
                             </span>
                           </div>
-                          <textarea
-                            className="w-full text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-primary-olive text-[#2c2c26] dark:text-[#f5f5f0] font-sans"
-                            rows={3}
-                            value={editNotes}
-                            onChange={(e) => setEditNotes(e.target.value)}
-                            placeholder="Type follow-up or reminder notes here. Autosaves as you type..."
-                          />
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1.5 text-right font-mono text-[10px]">
+                          <span className="inline-flex items-center gap-1 font-bold text-[#5A5A40] dark:text-[#ecece5] bg-[#f5f5f0] dark:bg-[#151510] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 px-1.5 py-0.5 rounded-md shrink-0">
+                            {f.id}
+                            <InlineCopy type="ticketId" value={f.id} className="min-w-[20px] min-h-[20px] p-0" />
+                          </span>
+                          
+                          {/* Date and Time values with exact colors */}
+                          <span className={`inline-flex items-center gap-1 font-bold border px-1.5 py-0.5 rounded-md ${statusBadgeStyle}`}>
+                            <Calendar className="w-3 h-3" />
+                            {overdue ? 'OVERDUE: ' : ''}{getRelativeDateLabel(f.followUpDate)} @ {f.followUpTime}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Notes Area */}
+                      <div className="bg-[#f5f5f0]/45 dark:bg-[#151510]/40 p-3 rounded-xl border border-[#5A5A40]/5 dark:border-[#8a8a70]/10">
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-[#5A5A40]/60 uppercase">EDIT FOLLOW-UP NOTES</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider">
+                                {followupSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
+                                {followupSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
+                                {followupSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
+                                {followupSaveStatus === 'FAILED' && <span className="text-red-500 animate-bounce">❌ SAVE FAILED</span>}
+                              </span>
+                            </div>
+                            <textarea
+                              className="w-full text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-primary-olive text-[#2c2c26] dark:text-[#f5f5f0] font-sans"
+                              rows={3}
+                              value={editNotes}
+                              onChange={(e) => setEditNotes(e.target.value)}
+                              placeholder="Type follow-up or reminder notes here. Autosaves as you type..."
+                            />
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                onClick={() => setEditingId(null)}
+                                className="px-4 py-1.5 text-[10px] font-bold bg-[#5A5A40] text-white rounded-md cursor-pointer uppercase"
+                              >
+                                Done Editing
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[#2c2c26]/90 dark:text-[#ecece5] whitespace-pre-wrap leading-relaxed break-words italic font-sans">
+                            "{f.notes}"
+                          </p>
+                        )}
+                      </div>
+
+                      {(() => {
+                        const customer = customers.find(c => c.id === f.customerId);
+                        if (!customer) return null;
+                        return (
+                          <div className="pt-1.5 flex justify-end">
+                            <SmartContactActions
+                              customerName={customer.name}
+                              mobileNumber={customer.mobileNumber}
+                              whatsAppNumber={customer.whatsAppNumber}
+                              imoNumber={customer.imoNumber}
+                              customerId={customer.id}
+                            />
+                          </div>
+                        );
+                      })()}
+
+                      {/* Rescheduling Form Inline */}
+                      {isRescheduling && (
+                        <div className="p-3 border border-amber-200 dark:border-amber-900/40 bg-amber-50/20 rounded-xl space-y-3 font-mono animate-fade-in">
+                          <span className="text-[10px] font-bold text-amber-950 dark:text-amber-400 uppercase block">Reschedule Follow-up</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="date"
+                              required
+                              className="text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
+                              value={rescheduleDate}
+                              onChange={(e) => setRescheduleDate(e.target.value)}
+                            />
+                            <input
+                              type="time"
+                              required
+                              className="text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
+                              value={rescheduleTime}
+                              onChange={(e) => setRescheduleTime(e.target.value)}
+                            />
+                          </div>
                           <div className="flex items-center gap-2 justify-end">
                             <button
-                              onClick={() => setEditingId(null)}
-                              className="px-4 py-1.5 text-[10px] font-bold bg-[#5A5A40] text-white rounded-md cursor-pointer uppercase"
+                              onClick={() => setReschedulingId(null)}
+                              className="px-2.5 py-1 text-[10px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
                             >
-                              Done Editing
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleSaveReschedule(f.id)}
+                              className="px-3 py-1 text-[10px] font-bold bg-[#F97316] text-white rounded-md hover:bg-opacity-90"
+                            >
+                              Reschedule
                             </button>
                           </div>
                         </div>
-                      ) : (
-                        <p className="text-xs text-[#2c2c26]/90 dark:text-[#ecece5] whitespace-pre-wrap leading-relaxed break-words italic font-sans">
-                          "{f.notes}"
-                        </p>
                       )}
-                    </div>
 
-                    {(() => {
-                      const customer = customers.find(c => c.id === f.customerId);
-                      if (!customer) return null;
-                      return (
-                        <div className="pt-1.5 flex justify-end">
-                          <SmartContactActions
-                            customerName={customer.name}
-                            mobileNumber={customer.mobileNumber}
-                            whatsAppNumber={customer.whatsAppNumber}
-                            imoNumber={customer.imoNumber}
-                            customerId={customer.id}
-                          />
+                      {/* Confirmation Dialog Inline for Deletion */}
+                      {isConfirmDeleting && (
+                        <div className="p-3 border border-rose-200 dark:border-rose-900/40 bg-rose-50/45 dark:bg-rose-950/10 rounded-xl space-y-2 animate-fade-in">
+                          <p className="text-xs font-semibold text-rose-950 dark:text-rose-300">Are you absolutely sure you want to delete this follow-up?</p>
+                          <p className="text-[10px] text-rose-800 dark:text-rose-400 leading-normal">This action is irreversible and will remove the record permanently.</p>
+                          <div className="flex items-center gap-2 justify-end">
+                            <button
+                              onClick={() => setDeletingId(null)}
+                              className="px-2.5 py-1 text-[10px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleDelete(f.id)}
+                              className="px-3 py-1 text-[10px] font-bold bg-rose-600 text-white rounded-md hover:bg-rose-700"
+                            >
+                              Delete Permanently
+                            </button>
+                          </div>
                         </div>
-                      );
-                    })()}
+                      )}
 
-                    {/* Rescheduling Form Inline */}
-                    {isRescheduling && (
-                      <div className="p-3 border border-amber-200 dark:border-amber-900/40 bg-amber-50/20 rounded-xl space-y-3 font-mono animate-fade-in">
-                        <span className="text-[10px] font-bold text-amber-950 dark:text-amber-400 uppercase block">Reschedule Follow-up</span>
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="date"
-                            required
-                            className="text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
-                            value={rescheduleDate}
-                            onChange={(e) => setRescheduleDate(e.target.value)}
-                          />
-                          <input
-                            type="time"
-                            required
-                            className="text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
-                            value={rescheduleTime}
-                            onChange={(e) => setRescheduleTime(e.target.value)}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 justify-end">
-                          <button
-                            onClick={() => setReschedulingId(null)}
-                            className="px-2.5 py-1 text-[10px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => handleSaveReschedule(f.id)}
-                            className="px-3 py-1 text-[10px] font-bold bg-[#F97316] text-white rounded-md hover:bg-opacity-90"
-                          >
-                            Reschedule
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Confirmation Dialog Inline for Deletion */}
-                    {isConfirmDeleting && (
-                      <div className="p-3 border border-rose-200 dark:border-rose-900/40 bg-rose-50/45 dark:bg-rose-950/10 rounded-xl space-y-2 animate-fade-in">
-                        <p className="text-xs font-semibold text-rose-950 dark:text-rose-300">Are you absolutely sure you want to delete this follow-up?</p>
-                        <p className="text-[10px] text-rose-800 dark:text-rose-400 leading-normal">This action is irreversible and will remove the record permanently.</p>
-                        <div className="flex items-center gap-2 justify-end">
-                          <button
-                            onClick={() => setDeletingId(null)}
-                            className="px-2.5 py-1 text-[10px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => handleDelete(f.id)}
-                            className="px-3 py-1 text-[10px] font-bold bg-rose-600 text-white rounded-md hover:bg-rose-700"
-                          >
-                            Delete Permanently
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Footer row of card: Action buttons */}
-                    <div className="flex items-center justify-between pt-2.5 border-t border-[#f5f5f0] dark:border-[#151510]">
-                      <span className="text-[9px] text-[#5A5A40]/55 dark:text-[#8a8a70] uppercase font-bold tracking-wider">
-                        Created: {new Date(f.createdAt || '').toLocaleDateString()}
-                      </span>
-                      
-                      <div className="flex items-center gap-2">
+                      {/* Footer row of card: Action buttons */}
+                      <div className="flex items-center justify-between pt-2.5 border-t border-[#f5f5f0] dark:border-[#151510]">
+                        <span className="text-[9px] text-[#5A5A40]/55 dark:text-[#8a8a70] uppercase font-bold tracking-wider">
+                          Created: {new Date(f.createdAt || '').toLocaleDateString()}
+                        </span>
                         
-                        {/* Complete action */}
-                        {f.status === 'Pending' && (
-                          <button
-                            onClick={() => handleMarkComplete(f)}
-                            title="Mark Completed"
-                            id={`btn-complete-followup-${f.id}`}
-                            className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-[#5A5A40] dark:text-[#ecece5] hover:text-emerald-700 dark:hover:text-emerald-400 border border-[#5A5A40]/10 dark:border-[#8a8a70]/30 rounded-lg active:scale-95 transition-all cursor-pointer"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          
+                          {/* Complete action */}
+                          {f.status === 'Pending' && (
+                            <button
+                              onClick={() => handleMarkComplete(f)}
+                              title="Mark Completed"
+                              id={`btn-complete-followup-${f.id}`}
+                              className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-[#5A5A40] dark:text-[#ecece5] hover:text-emerald-700 dark:hover:text-emerald-400 border border-[#5A5A40]/10 dark:border-[#8a8a70]/30 rounded-lg active:scale-95 transition-all cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
-                        {f.status === 'Completed' && (
-                          <span className="text-[10px] text-emerald-600 font-semibold italic flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/10 px-2 py-0.5 rounded-md">
-                            ✓ Completed
-                          </span>
-                        )}
+                          {f.status === 'Completed' && (
+                            <span className="text-[10px] text-emerald-600 font-semibold italic flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/10 px-2 py-0.5 rounded-md">
+                              ✓ Completed
+                            </span>
+                          )}
 
+                        </div>
                       </div>
-                    </div>
 
+                    </div>
                   </div>
+                );
+              })}
+
+              {filteredFollowUps.length > visibleCount && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(prev => prev + 20)}
+                    className="px-6 py-2.5 text-xs font-bold rounded-full bg-[#5A5A40] text-white hover:bg-opacity-90 transition-all cursor-pointer shadow-sm uppercase tracking-wider animate-fade-in"
+                  >
+                    Show More Tasks (showing {visibleCount} of {filteredFollowUps.length})
+                  </button>
                 </div>
-              );
-            })
+              )}
+            </>
           ) : (
             <div className="bg-white dark:bg-[#20201a] rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 p-8 text-center space-y-4" id="followups-empty-state">
               <div className="w-12 h-12 bg-[#f5f5f0] dark:bg-[#151510] rounded-full flex items-center justify-center mx-auto text-[#5A5A40]/40 dark:text-[#8a8a70]/55">
@@ -809,4 +833,6 @@ export default function FollowUps({
 
     </div>
   );
-}
+});
+
+export default FollowUps;
