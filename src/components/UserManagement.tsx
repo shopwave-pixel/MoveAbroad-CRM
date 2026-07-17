@@ -192,7 +192,61 @@ export default function UserManagement({ config, currentUser }: UserManagementPr
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Card list for Mobile Devices (Optimized) */}
+          <div className="p-4 grid grid-cols-1 gap-3 md:hidden" id="user-mobile-cards">
+            {users.length === 0 ? (
+              <div className="py-10 text-center text-slate-400">
+                No user records located. Tap "Add New User" to register.
+              </div>
+            ) : (
+              users.map((u) => (
+                <div key={u.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50/30 space-y-3 relative">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-slate-400 text-xs">{u.id}</span>
+                    <span className={`inline-flex items-center gap-1 font-semibold text-[10px] ${
+                      u.status === 'Active' ? 'text-emerald-700' : 'text-slate-400'
+                    }`}>
+                      {u.status === 'Active' ? <UserCheck className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}
+                      {u.status}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1">
+                      {u.fullName} {u.id === currentUser.id && <span className="text-[10px] bg-slate-100 text-slate-500 font-semibold py-0.5 px-1.5 rounded">You</span>}
+                    </h4>
+                    <p className="text-slate-500 text-xs font-mono mt-1">Login ID: {u.loginId}</p>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${
+                        u.role === 'Admin' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {u.role}
+                      </span>
+                      <div className="space-x-2 flex">
+                        <button
+                          onClick={() => handleOpenEdit(u)}
+                          className="p-2.5 bg-white hover:bg-slate-50 text-slate-600 rounded-lg border border-slate-200 transition-all inline-flex items-center justify-center min-w-[44px] min-h-[44px]"
+                          title="Edit User"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(u.id, u.fullName)}
+                          disabled={u.id === currentUser.id}
+                          className="p-2.5 bg-white hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg border border-slate-200 hover:border-red-100 transition-all disabled:opacity-40 inline-flex items-center justify-center min-w-[44px] min-h-[44px]"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table view (Hidden on Mobile) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold">

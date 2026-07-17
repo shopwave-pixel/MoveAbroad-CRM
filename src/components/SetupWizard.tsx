@@ -192,7 +192,7 @@ export default function SetupWizard({ onSetupComplete, onCancel }: SetupWizardPr
           <div className="flex items-center gap-2.5">
             <Settings className="w-6 h-6 text-emerald-600 animate-spin-slow" />
             <div>
-              <h2 className="font-bold text-sm tracking-tight text-slate-900">MoveAbroad CRM</h2>
+              <h2 className="font-bold text-sm tracking-tight text-slate-900">MoveAboard CRM</h2>
               <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">Setup Wizard</p>
             </div>
           </div>
@@ -230,7 +230,7 @@ export default function SetupWizard({ onSetupComplete, onCancel }: SetupWizardPr
                 <Settings className="w-8 h-8" />
               </div>
               <div className="space-y-2">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Welcome to MoveAbroad CRM</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Welcome to MoveAboard CRM</h1>
                 <p className="text-sm text-slate-500 max-w-md mx-auto">
                   Configure your overseas recruitment visa system in less than 5 minutes. Select your operating database preference below to get started.
                 </p>
@@ -690,7 +690,7 @@ export default function SetupWizard({ onSetupComplete, onCancel }: SetupWizardPr
               <div className="space-y-2">
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">Setup Configuration Complete!</h1>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Your MoveAbroad CRM is fully initialized. Here is a summary of your active system database configuration.
+                  Your MoveAboard CRM is fully initialized. Here is a summary of your active system database configuration.
                 </p>
               </div>
 

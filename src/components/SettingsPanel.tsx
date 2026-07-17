@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GOOGLE_APPS_SCRIPT_CODE } from '../utils/gasCode';
 import { SyncConfig } from '../types';
 import { 
@@ -36,6 +36,40 @@ export default function SettingsPanel({
   const [showInstructions, setShowInstructions] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [testingConnection, setTestingConnection] = useState(false);
+  const [settingsSaveStatus, setSettingsSaveStatus] = useState<'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED'>('IDLE');
+
+  // Debounced auto-save for Google Sheets URL
+  useEffect(() => {
+    if (urlInput.trim() === config.webAppUrl) {
+      setSettingsSaveStatus('IDLE');
+      return;
+    }
+
+    setSettingsSaveStatus('EDITING');
+    window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'EDITING' } }));
+
+    const timer = setTimeout(() => {
+      setSettingsSaveStatus('SAVING');
+      window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVING' } }));
+      try {
+        onUpdateConfig({
+          webAppUrl: urlInput.trim(),
+          isLiveMode: !!urlInput.trim() && config.isLiveMode
+        });
+        setSettingsSaveStatus('SAVED');
+        window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVED' } }));
+        setTimeout(() => {
+          setSettingsSaveStatus('IDLE');
+          window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'IDLE' } }));
+        }, 1500);
+      } catch (err) {
+        setSettingsSaveStatus('FAILED');
+        window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'FAILED' } }));
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [urlInput, config.webAppUrl, onUpdateConfig, config.isLiveMode]);
 
   const handleSave = () => {
     onUpdateConfig({
@@ -112,15 +146,15 @@ export default function SettingsPanel({
   return (
     <div className="space-y-6" id="settings-panel">
       {/* Synchronization Status Card */}
-      <div className="bg-white dark:bg-[#20201a] rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 p-5">
+      <div className="bg-white rounded-[20px] border border-t-4 border-t-[#475569] border-[#E5E7EB] p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl ${config.isLiveMode ? 'bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#5A5A40]/20 dark:text-[#ecece5]' : 'bg-[#5A5A40]/10 text-slate-500 dark:bg-[#5A5A40]/10 dark:text-slate-400'}`}>
+            <div className={`p-2.5 rounded-xl ${config.isLiveMode ? 'bg-[#475569]/10 text-[#475569]' : 'bg-gray-100 text-slate-400'}`}>
               {config.isLiveMode ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
             </div>
             <div>
-              <h2 className="font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] text-base">Backend Engine</h2>
-              <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">
+              <h2 className="font-serif font-bold text-[#475569] text-sm uppercase">Backend Engine Connection</h2>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">
                 {config.isLiveMode ? 'Live Google Sheets Database Active' : 'Offline / Demo (LocalStorage) Mode'}
               </p>
             </div>
@@ -131,7 +165,7 @@ export default function SettingsPanel({
             id="btn-toggle-live-mode"
             disabled={!config.webAppUrl}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              config.isLiveMode ? 'bg-[#5A5A40]' : 'bg-gray-200 dark:bg-[#151510] disabled:opacity-50 disabled:cursor-not-allowed'
+              config.isLiveMode ? 'bg-[#475569]' : 'bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
             }`}
           >
             <span
@@ -142,28 +176,28 @@ export default function SettingsPanel({
           </button>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-[#5A5A40]/80 dark:text-[#8a8a70] mb-1.5">
-              Google Apps Script Web App URL
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-[10px] font-bold text-gray-500 tracking-wider uppercase">
+                Google Apps Script Web App URL
+              </label>
+              <span className="text-[9px] font-bold uppercase tracking-wider">
+                {settingsSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
+                {settingsSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
+                {settingsSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
+                {settingsSaveStatus === 'FAILED' && <span className="text-red-500 animate-bounce">❌ SAVE FAILED</span>}
+              </span>
+            </div>
             <div className="flex gap-2">
               <input
                 type="url"
                 id="input-web-app-url"
-                className="flex-1 text-sm bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#5A5A40] focus:bg-white dark:focus:bg-[#1e1e18] text-[#2c2c26] dark:text-[#f5f5f0]"
-                placeholder="https://script.google.com/macros/s/.../exec"
+                className="w-full text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#475569]/20 focus:border-[#475569] text-[#1F2937] transition-all font-medium"
+                placeholder="HTTPS://SCRIPT.GOOGLE.COM/MACROS/S/.../EXEC"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
               />
-              <button
-                type="button"
-                id="btn-save-settings"
-                onClick={handleSave}
-                className="bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white font-medium text-sm px-5 py-2.5 rounded-full shadow-sm hover:shadow-md transition-all cursor-pointer"
-              >
-                Save
-              </button>
             </div>
           </div>
 
@@ -173,9 +207,9 @@ export default function SettingsPanel({
               id="btn-test-connection"
               onClick={handleTestConnection}
               disabled={testingConnection || !urlInput.trim()}
-              className="flex-1 sm:flex-none text-xs font-bold text-[#5A5A40] dark:text-[#ecece5] hover:text-[#4a4a34] dark:hover:text-[#fff] bg-[#5A5A40]/10 hover:bg-[#5A5A40]/20 dark:bg-[#5A5A40]/20 dark:hover:bg-[#5A5A40]/30 disabled:opacity-50 px-4 py-2.5 rounded-xl transition-all text-center cursor-pointer"
+              className="flex-1 sm:flex-none text-xs font-bold text-[#475569] hover:text-[#334155] bg-[#475569]/10 hover:bg-[#475569]/20 disabled:opacity-50 px-5 py-2.5 rounded-xl transition-all text-center cursor-pointer h-11"
             >
-              {testingConnection ? 'Testing...' : 'Test Connection'}
+              {testingConnection ? 'TESTING CONNECTION...' : 'TEST CONNECTION'}
             </button>
             {config.isLiveMode && (
               <button
@@ -183,9 +217,9 @@ export default function SettingsPanel({
                 id="btn-sync-now"
                 onClick={onRefreshData}
                 disabled={isLoading}
-                className="flex-1 sm:flex-none text-xs font-bold text-[#5A5A40] dark:text-[#ecece5] hover:text-[#4a4a34] dark:hover:text-[#fff] bg-[#5A5A40]/10 hover:bg-[#5A5A40]/20 dark:bg-[#5A5A40]/20 dark:hover:bg-[#5A5A40]/30 disabled:opacity-50 px-4 py-2.5 rounded-xl transition-all text-center cursor-pointer"
+                className="flex-1 sm:flex-none text-xs font-bold text-[#475569] hover:text-[#334155] bg-[#475569]/10 hover:bg-[#475569]/20 disabled:opacity-50 px-5 py-2.5 rounded-xl transition-all text-center cursor-pointer h-11"
               >
-                {isLoading ? 'Syncing...' : 'Sync Now'}
+                {isLoading ? 'SYNCING...' : 'SYNC NOW'}
               </button>
             )}
           </div>
@@ -193,28 +227,28 @@ export default function SettingsPanel({
           {testResult && (
             <div 
               id="test-result-alert"
-              className={`p-3.5 rounded-xl text-xs leading-relaxed ${
+              className={`p-4 rounded-xl text-xs leading-relaxed border ${
                 testResult.success 
-                  ? 'bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 border border-[#5A5A40]/25 dark:border-[#8a8a70]/30 text-[#5A5A40] dark:text-[#ecece5]' 
-                  : 'bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40 text-rose-800 dark:text-rose-300'
+                  ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+                  : 'bg-rose-50 border-rose-100 text-rose-800'
               }`}
             >
-              <div className="font-semibold mb-1">
-                {testResult.success ? '✓ Test Successful' : '✗ Connection Failed'}
+              <div className="font-bold mb-1 uppercase">
+                {testResult.success ? '✓ Connection Active' : '✗ Connection Failed'}
               </div>
-              {testResult.message}
+              <p className="font-medium uppercase">{testResult.message}</p>
             </div>
           )}
           
           {onOpenDebug && (
-            <div className="pt-4 border-t border-[#5A5A40]/10 dark:border-[#8a8a70]/20 mt-4 flex justify-end">
+            <div className="pt-4 border-t border-gray-100 mt-4 flex justify-end">
               <button
                 type="button"
                 id="btn-open-debug-panel"
                 onClick={onOpenDebug}
-                className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/40 dark:hover:bg-emerald-950/40 px-4.5 py-2.5 rounded-full transition-all cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-bold text-[#1F2937] bg-gray-100 hover:bg-gray-200 border border-gray-200 px-5 py-2.5 rounded-full transition-all cursor-pointer h-11"
               >
-                🛠️ Admin Debug & Testing Center
+                🛠️ DEVS & SYSTEM ADMIN DIAGNOSTICS
               </button>
             </div>
           )}
@@ -222,106 +256,106 @@ export default function SettingsPanel({
       </div>
 
       {/* Accordion Setup Guide */}
-      <div className="bg-white dark:bg-[#20201a] rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 overflow-hidden">
+      <div className="bg-white rounded-[20px] border border-gray-200 overflow-hidden shadow-xs">
         <button
           onClick={() => setShowInstructions(!showInstructions)}
           id="btn-toggle-instructions"
-          className="w-full flex items-center justify-between p-5 text-left focus:outline-none hover:bg-[#5A5A40]/5 dark:hover:bg-[#5A5A40]/10 transition-all cursor-pointer"
+          className="w-full flex items-center justify-between p-5 text-left focus:outline-none hover:bg-slate-50 transition-all cursor-pointer"
         >
           <div className="flex items-center gap-3">
-            <FileSpreadsheet className="w-5 h-5 text-[#5A5A40] dark:text-[#ecece5]" />
+            <FileSpreadsheet className="w-5 h-5 text-[#475569]" />
             <div>
-              <h3 className="font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] text-sm">How to Connect Google Sheets</h3>
-              <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">Step-by-step instructions (takes 2 minutes)</p>
+              <h3 className="font-serif font-bold text-[#475569] text-sm uppercase">How to Connect Google Sheets</h3>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Step-by-step spreadsheet sync instructions</p>
             </div>
           </div>
-          {showInstructions ? <ChevronUp className="w-5 h-5 text-[#5A5A40]/60 dark:text-[#ecece5]/60" /> : <ChevronDown className="w-5 h-5 text-[#5A5A40]/60 dark:text-[#ecece5]/60" />}
+          {showInstructions ? <ChevronUp className="w-5 h-5 text-[#475569]/60" /> : <ChevronDown className="w-5 h-5 text-[#475569]/60" />}
         </button>
 
         {showInstructions && (
-          <div className="px-5 pb-6 pt-2 border-t border-[#5A5A40]/10 dark:border-[#8a8a70]/20 space-y-4 text-xs text-[#2c2c26]/80 dark:text-[#ecece5]/80 leading-relaxed">
+          <div className="px-5 pb-6 pt-2 border-t border-gray-100 space-y-4 text-xs text-gray-600 leading-relaxed font-medium uppercase">
             <div className="space-y-3">
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">1</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">1</span>
                 <div>
-                  Create a brand new <a href="https://sheets.new" target="_blank" rel="noreferrer" className="text-[#5A5A40] dark:text-[#ecece5] hover:underline font-bold inline-flex items-center gap-0.5">Google Sheet <ExternalLink className="w-3 h-3" /></a>.
+                  Create a brand new <a href="https://sheets.new" target="_blank" rel="noreferrer" className="text-[#475569] hover:underline font-bold inline-flex items-center gap-0.5">Google Sheet <ExternalLink className="w-3 h-3" /></a>.
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">2</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">2</span>
                 <div>
-                  From the top menu, go to <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Extensions</span> &rarr; <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Apps Script</span>.
+                  From the top menu, go to <span className="font-semibold text-[#475569]">Extensions</span> &rarr; <span className="font-semibold text-[#475569]">Apps Script</span>.
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">3</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">3</span>
                 <div>
-                  Delete any boilerplate code inside the editor and paste the <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Backend Code</span> provided below.
+                  Delete any boilerplate code inside the editor and paste the <span className="font-semibold text-[#475569]">Backend Code</span> provided below.
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">4</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">4</span>
                 <div>
-                  Click the <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Save (floppy disk)</span> icon.
+                  Click the <span className="font-semibold text-[#475569]">Save (floppy disk)</span> icon.
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">5</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">5</span>
                 <div>
-                  Click <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Deploy</span> &rarr; <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">New deployment</span>.
+                  Click <span className="font-semibold text-[#475569]">Deploy</span> &rarr; <span className="font-semibold text-[#475569]">New deployment</span>.
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">6</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">6</span>
                 <div>
-                  Click the gear icon next to "Select type" and select <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Web app</span>.
+                  Click the gear icon next to "Select type" and select <span className="font-semibold text-[#475569]">Web app</span>.
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">7</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">7</span>
                 <div>
                   Configure the settings exactly like this:
                   <ul className="list-disc pl-5 mt-1.5 space-y-1">
-                    <li><span className="font-semibold text-[#2c2c26]/90 dark:text-[#ecece5]/90">Execute as:</span> Me (your email)</li>
-                    <li><span className="font-semibold text-[#2c2c26]/90 dark:text-[#ecece5]/90">Who has access:</span> Anyone <span className="text-rose-500 font-bold">(Crucial!)</span></li>
+                    <li><span className="font-semibold text-gray-700">Execute as:</span> Me (your email)</li>
+                    <li><span className="font-semibold text-gray-700">Who has access:</span> Anyone <span className="text-rose-500 font-bold">(Crucial!)</span></li>
                   </ul>
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">8</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">8</span>
                 <div>
-                  Click <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Deploy</span>, authorize the permissions when prompted, then <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">copy the Web App URL</span>.
+                  Click <span className="font-semibold text-[#475569]">Deploy</span>, authorize the permissions when prompted, then <span className="font-semibold text-[#475569]">copy the Web App URL</span>.
                 </div>
               </div>
               <div className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] flex items-center justify-center font-bold text-[10px]">9</span>
+                <span className="flex-none w-5 h-5 rounded-full bg-[#475569]/10 text-[#475569] flex items-center justify-center font-bold text-[10px]">9</span>
                 <div>
-                  Paste it in the input field above, save it, and enable <span className="font-semibold text-[#5A5A40] dark:text-[#ecece5]">Live Mode</span>!
+                  Paste it in the input field above, save it, and enable <span className="font-semibold text-[#475569]">Live Mode</span>!
                 </div>
               </div>
             </div>
 
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3.5 text-amber-900 dark:text-amber-300 text-xs">
-              <strong>Pro Tip:</strong> The script automatically handles creating the necessary sheets (<code className="bg-amber-100/70 dark:bg-amber-900/40 px-1 rounded font-mono">Customers</code>, <code className="bg-amber-100/70 dark:bg-amber-900/40 px-1 rounded font-mono">Tickets</code>, and <code className="bg-amber-100/70 dark:bg-amber-900/40 px-1 rounded font-mono">FollowUps</code>) and column headers on first access. You do not need to format the Google Sheet yourself!
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-amber-900 text-xs">
+              <strong>Pro Tip:</strong> The script automatically handles creating the necessary sheets (<code className="bg-amber-100/70 px-1 rounded font-mono">Customers</code>, <code className="bg-amber-100/70 px-1 rounded font-mono">Tickets</code>, and <code className="bg-amber-100/70 px-1 rounded font-mono">FollowUps</code>) and column headers on first access. You do not need to format the Google Sheet yourself!
             </div>
           </div>
         )}
       </div>
 
       {/* Copyable Code Box */}
-      <div className="bg-white dark:bg-[#20201a] rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 overflow-hidden">
-        <div className="p-5 border-b border-[#5A5A40]/10 dark:border-[#8a8a70]/20 flex items-center justify-between">
+      <div className="bg-white rounded-[20px] border border-gray-200 overflow-hidden shadow-xs">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Database className="w-5 h-5 text-[#5A5A40] dark:text-[#ecece5]" />
+            <Database className="w-5 h-5 text-[#475569]" />
             <div>
-              <h3 className="font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] text-sm">Apps Script Backend Code</h3>
-              <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">Paste this script in Google Sheets Extensions</p>
+              <h3 className="font-serif font-bold text-[#475569] text-sm uppercase">Apps Script Backend Code</h3>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Paste this script in Google Sheets Extensions</p>
             </div>
           </div>
           <button
             onClick={handleCopyCode}
             id="btn-copy-gas-code"
-            className="flex items-center gap-1 text-xs font-bold text-[#5A5A40] dark:text-[#ecece5] bg-[#5A5A40]/10 hover:bg-[#5A5A40]/20 dark:bg-[#5A5A40]/20 dark:hover:bg-[#5A5A40]/30 px-3.5 py-2 rounded-full transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-xs font-bold text-[#475569] bg-[#475569]/10 hover:bg-[#475569]/20 px-3.5 py-2 rounded-full transition-colors cursor-pointer h-9"
           >
             {isCopied ? (
               <>
@@ -334,7 +368,7 @@ export default function SettingsPanel({
             )}
           </button>
         </div>
-        <div className="p-4 bg-[#2c2c26] text-[#f5f5f0]/90 font-mono text-[10.5px] leading-relaxed max-h-72 overflow-y-auto">
+        <div className="p-4 bg-slate-950 text-[#F8FAFC] font-mono text-[10.5px] leading-relaxed max-h-72 overflow-y-auto">
           <pre>{GOOGLE_APPS_SCRIPT_CODE}</pre>
         </div>
       </div>

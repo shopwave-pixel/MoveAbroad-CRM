@@ -1,5 +1,5 @@
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
- * Google Apps Script - MoveAbroad CRM Backend REST API
+ * Google Apps Script - MoveAboard CRM Backend REST API
  * 
  * Instructions:
  * 1. Open a new Google Sheet.
@@ -9,12 +9,12 @@ export const GOOGLE_APPS_SCRIPT_CODE = `/**
  * 5. Click "Deploy" (top right) -> "New deployment".
  * 6. Select type: "Web app".
  * 7. Set:
- *    - Description: "MoveAbroad CRM REST API"
+ *    - Description: "MoveAboard CRM REST API"
  *    - Execute as: "Me" (your-email)
  *    - Who has access: "Anyone" (This is crucial to allow the CRM UI to access it)
  * 8. Click "Deploy".
  * 9. Authorize the application if prompted.
- * 10. Copy the "Web app URL" and paste it into the Settings of your MoveAbroad CRM App!
+ * 10. Copy the "Web app URL" and paste it into the Settings of your MoveAboard CRM App!
  */
 
 // Handle GET requests

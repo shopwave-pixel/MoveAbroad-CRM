@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
-import { Customer, Ticket } from '../types';
-import { Search, Phone, Calendar, ChevronRight, X, UserMinus, Plus, Globe, MessageSquare } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Customer, Ticket, FollowUp } from '../types';
+import { Search, ChevronRight, UserPlus } from 'lucide-react';
+import SmartContactActions from './SmartContactActions';
+import InlineCopy from './InlineCopy';
+import { 
+  Card, 
+  Input, 
+  Badge, 
+  Button 
+} from './ui';
 
 interface CustomerSearchProps {
   customers: Customer[];
   tickets: Ticket[];
+  followUps: FollowUp[];
   onSelectCustomer: (customer: Customer) => void;
   onNavigateToAddCustomer: () => void;
 }
@@ -12,145 +21,171 @@ interface CustomerSearchProps {
 export default function CustomerSearch({
   customers,
   tickets,
+  followUps,
   onSelectCustomer,
   onNavigateToAddCustomer
 }: CustomerSearchProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
-  // Clear query helper
-  const handleClear = () => setSearchQuery('');
+  // 250ms debounce for search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 250);
 
-  // Filter customers instantly
-  const filteredCustomers = customers.filter(customer => {
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) return true;
-    return (
-      customer.name.toLowerCase().includes(query) ||
-      customer.mobileNumber.replace(/\D/g, '').includes(query) ||
-      customer.mobileNumber.includes(query) ||
-      (customer.destinationCountry && customer.destinationCountry.toLowerCase().includes(query)) ||
-      (customer.source && customer.source.toLowerCase().includes(query))
-    );
-  });
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery]);
 
-  // Helper to count tickets per customer
-  const getTicketCount = (customerId: string) => {
-    return tickets.filter(t => t.customerId === customerId).length;
-  };
+  // Real-time filtering by Name, Mobile, Customer ID, or Ticket ID
+  const filteredCustomers = useMemo(() => {
+    const q = debouncedQuery.toLowerCase().trim();
+    if (!q) return customers;
+    return customers.filter(c => {
+      // 1. Check Name
+      if (c.name.toLowerCase().includes(q)) return true;
+      // 2. Check Mobile
+      if (c.mobileNumber.toLowerCase().includes(q)) return true;
+      // 3. Check Customer ID
+      if (c.id.toLowerCase().includes(q)) return true;
+      // 4. Check Ticket ID
+      const customerTickets = tickets.filter(t => t.customerId === c.id);
+      const matchesTicket = customerTickets.some(t => t.id.toLowerCase().includes(q));
+      if (matchesTicket) return true;
+
+      return false;
+    });
+  }, [debouncedQuery, customers, tickets]);
 
   return (
-    <div className="space-y-4" id="customer-search-container">
-      {/* Search Input Bar */}
+    <div className="space-y-6" id="customer-search-container">
+      {/* Module-specific Search Input using standard Input */}
       <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A5A40]/60 dark:text-[#8a8a70]/80">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-accent-green">
           <Search className="w-5 h-5" />
         </div>
-        <input
+        <Input
           type="text"
-          id="customer-search-input"
-          className="w-full text-sm bg-white dark:bg-[#20201a] border border-[#5A5A40]/20 dark:border-[#8a8a70]/30 rounded-xl pl-11 pr-10 py-3.5 focus:outline-none focus:ring-2 focus:ring-[#5A5A40] text-[#2c2c26] dark:text-[#f5f5f0] placeholder-[#5A5A40]/40 dark:placeholder-[#8a8a70]/50 shadow-xs transition-all"
-          placeholder="Search name, mobile, source, or country..."
+          placeholder="SEARCH CUSTOMERS BY NAME, MOBILE, CUSTOMER ID, OR TICKET ID..."
+          className="pl-12 pr-10 py-4 font-semibold shadow-xs"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
         {searchQuery && (
           <button
             type="button"
-            id="btn-clear-search"
-            onClick={handleClear}
-            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#5A5A40]/50 hover:text-[#5A5A40] focus:outline-none"
+            onClick={() => setSearchQuery('')}
+            className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <span className="text-xl font-bold">&times;</span>
           </button>
         )}
       </div>
 
-      {/* Customers List / Results */}
-      <div className="space-y-3" id="customer-list-results">
-        {filteredCustomers.length > 0 ? (
-          filteredCustomers.map(customer => {
-            const ticketCount = getTicketCount(customer.id);
-            const initials = customer.name
-              .split(' ')
-              .map(n => n[0])
-              .join('')
-              .slice(0, 2)
-              .toUpperCase();
+      {/* Customer Profile Cards Grid */}
+      {filteredCustomers.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5" id="customers-grid">
+          {filteredCustomers.map((c) => {
+            const customerTickets = tickets.filter(t => t.customerId === c.id);
+            const customerFollowUps = followUps.filter(f => f.customerId === c.id);
+
+            // Find latest ticket to get ticket ID for Copy Ticket Action
+            const latestTicket = customerTickets.length > 0
+              ? customerTickets.reduce((latest, current) =>
+                  new Date(current.createdAt) > new Date(latest.createdAt) ? current : latest
+                , customerTickets[0])
+              : null;
 
             return (
-              <button
-                key={customer.id}
-                id={`customer-card-${customer.id}`}
-                onClick={() => onSelectCustomer(customer)}
-                className="w-full text-left bg-white dark:bg-[#20201a] p-4 rounded-2xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 hover:border-[#5A5A40]/30 dark:hover:border-[#8a8a70]/40 transition-all shadow-xs flex items-center justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/20 active:scale-[0.99]"
+              <Card
+                key={c.id}
+                id={`customer-card-${c.id}`}
+                borderTopColor="green"
+                className="flex flex-col justify-between gap-4 hover:-translate-y-1 hover:shadow-lg transition-all duration-200 group relative"
               >
-                <div className="flex items-center gap-3">
-                  {/* Avatar */}
-                  <div className="w-10 h-10 rounded-full bg-[#f5f5f0] dark:bg-[#151510] text-[#5A5A40] dark:text-[#ecece5] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 flex items-center justify-center font-bold text-sm tracking-wider">
-                    {initials || 'CU'}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="font-bold text-[#2c2c26] dark:text-[#f5f5f0] text-sm leading-tight">{customer.name}</h3>
-                      <span className="font-mono text-[9px] font-semibold text-[#5A5A40]/55 dark:text-[#8a8a70] bg-[#f5f5f0] dark:bg-[#151510] px-1 rounded">
-                        {customer.id}
-                      </span>
+                {/* Profile Header */}
+                <div className="flex items-start justify-between gap-2">
+                  <div 
+                    onClick={() => onSelectCustomer(c)}
+                    className="space-y-1 cursor-pointer flex-1"
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#ecece5] text-sm group-hover:text-primary-olive dark:group-hover:text-[#f5f5f0] transition-colors uppercase">
+                        {c.name}
+                      </h3>
+                      <InlineCopy type="name" value={c.name} className="min-w-[24px] min-h-[24px] p-0.5" />
+                      
+                      <Badge variant="olive" outline className="gap-0 px-1.5 py-0.2 rounded-md font-bold">
+                        {c.id}
+                        <InlineCopy type="customerId" value={c.id} className="min-w-[20px] min-h-[20px] p-0" />
+                      </Badge>
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[#5A5A40]/70 dark:text-[#8a8a70]/90">
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5 text-[#5A5A40]/45" />
-                        <span>{customer.mobileNumber}</span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-[#8a8a70]">
+                      <span className="flex items-center gap-1 font-semibold">
+                        📱 {c.mobileNumber}
+                        <InlineCopy type="mobile" value={c.mobileNumber} className="min-w-[24px] min-h-[24px] p-0.5" />
                       </span>
-                      {customer.destinationCountry && (
-                        <span className="flex items-center gap-1 text-[#5A5A40] dark:text-[#b8b89e] font-medium">
-                          <Globe className="w-3 h-3" />
-                          <span>{customer.destinationCountry}</span>
+                      {latestTicket && (
+                        <span className="flex items-center gap-1 font-semibold">
+                          🎫 {latestTicket.id}
+                          <InlineCopy type="ticketId" value={latestTicket.id} className="min-w-[24px] min-h-[24px] p-0.5" />
                         </span>
                       )}
-                      {customer.source && (
-                        <span className="bg-[#5A5A40]/5 dark:bg-[#8a8a70]/10 px-1.5 py-0.2 rounded text-[10px] text-[#5A5A40] dark:text-[#ecece5]">
-                          {customer.source}
-                        </span>
+                      {c.destinationCountry && (
+                        <span className="flex items-center gap-1">🌍 {c.destinationCountry}</span>
                       )}
                     </div>
                   </div>
+
+                  {/* Open Profile Button */}
+                  <button 
+                    onClick={() => onSelectCustomer(c)}
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-primary-olive dark:text-[#ecece5] shrink-0 cursor-pointer"
+                    title="View Profile Details"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
-                    ticketCount > 0 ? 'bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#8a8a70]/25 dark:text-[#ecece5]' : 'bg-[#f5f5f0] dark:bg-[#151510] text-[#2c2c26]/50 dark:text-[#8a8a70]/60'
-                  }`}>
-                    {ticketCount} {ticketCount === 1 ? 'Ticket' : 'Tickets'}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-[#5A5A40]/40 dark:text-[#8a8a70]/40" />
+                {/* Info and quick actions footer */}
+                <div className="pt-3 border-t border-gray-200 dark:border-[#8a8a70]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Activity Stats using standard Badge components */}
+                  <div className="flex items-center gap-3">
+                    <Badge variant="blue">🎫 {customerTickets.length} TICKETS</Badge>
+                    <Badge variant="purple">📅 {customerFollowUps.length} FOLLOWUPS</Badge>
+                  </div>
+
+                  {/* Smart Contact Actions icons */}
+                  <div className="flex items-center">
+                    <SmartContactActions
+                      mobileNumber={c.mobileNumber}
+                      customerName={c.name}
+                      customerId={c.id}
+                      ticketId={latestTicket?.id}
+                    />
+                  </div>
                 </div>
-              </button>
+              </Card>
             );
-          })
-        ) : (
-          <div className="bg-white dark:bg-[#20201a] rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 p-8 text-center space-y-4" id="search-no-results">
-            <div className="w-12 h-12 bg-[#f5f5f0] dark:bg-[#151510] rounded-full flex items-center justify-center mx-auto text-[#5A5A40]/40 dark:text-[#8a8a70]/40">
-              <Search className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] text-sm">No customers found</h4>
-              <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]/80 mt-1 max-w-xs mx-auto">
-                {searchQuery 
-                  ? `We couldn't find any customers matching "${searchQuery}".` 
-                  : 'Start by building your customer pipeline.'}
-              </p>
-            </div>
-            <button
-              onClick={onNavigateToAddCustomer}
-              id="btn-no-results-add-customer"
-              className="inline-flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white font-medium text-xs px-5 py-2.5 rounded-full shadow-lg shadow-[#5A5A40]/10 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Customer
-            </button>
-          </div>
-        )}
-      </div>
+          })}
+        </div>
+      ) : (
+        <Card className="text-center p-12 space-y-4 flex flex-col items-center">
+          <div className="text-4xl select-none">👥</div>
+          <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#ecece5] text-xs uppercase tracking-wide">NO CUSTOMERS FOUND</h3>
+          <p className="text-[10px] text-gray-400 font-bold uppercase">Onboard your first customer to begin managing profiles</p>
+          <Button
+            onClick={onNavigateToAddCustomer}
+            variant="success"
+            size="lg"
+            icon={<UserPlus className="w-4 h-4" />}
+          >
+            ADD CUSTOMER
+          </Button>
+        </Card>
+      )}
     </div>
   );
 }

@@ -87,7 +87,7 @@ export default function LoginScreen({ config, onLoginSuccess, onOpenSetupWizard 
             </div>
 
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight" id="app-title">
-              MoveAbroad CRM
+              MoveAboard CRM
             </h1>
             <p className="text-xs font-semibold text-emerald-700 tracking-wider uppercase mt-1">
               Bangladesh Overseas Recruitment
@@ -210,7 +210,7 @@ export default function LoginScreen({ config, onLoginSuccess, onOpenSetupWizard 
       {/* Footer Info & App Version */}
       <div className="text-center pb-6 space-y-1 px-4">
         <p className="text-xs text-slate-500">
-          &copy; {new Date().getFullYear()} MoveAbroad. All rights reserved.
+          &copy; {new Date().getFullYear()} MoveAboard. All rights reserved.
         </p>
         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-200/60 border border-slate-300/40 text-[10px] font-mono text-slate-600 font-medium">
           App Version 2.1.0-BD

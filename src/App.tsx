@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Customer, Ticket, FollowUp, SyncConfig, User } from './types';
 import { 
   fetchCRMData, 
@@ -20,6 +21,7 @@ import {
 
 import Dashboard from './components/Dashboard';
 import CustomerSearch from './components/CustomerSearch';
+import SmartGlobalSearch from './components/SmartGlobalSearch';
 import CustomerForm from './components/CustomerForm';
 import CustomerDetails from './components/CustomerDetails';
 import TicketsManager from './components/TicketsManager';
@@ -43,10 +45,43 @@ import {
   RefreshCw,
   Plus,
   LogOut,
-  UserCheck
+  UserCheck,
+  UserPlus
 } from 'lucide-react';
 
+const AUTH_ENABLED = false;
+
+const bypassAdminUser: User = {
+  id: 'USR-ADMIN-BYPASS',
+  fullName: 'Admin User',
+  loginId: 'admin',
+  password: '',
+  role: 'Admin',
+  status: 'Active',
+  createdAt: '2026-07-15T14:23:42-07:00'
+};
+
 export default function App() {
+  // Toast notifications state
+  const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
+
+  useEffect(() => {
+    const handleToastEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ message: string }>;
+      if (customEvent.detail && customEvent.detail.message) {
+        const id = Math.random().toString(36).substring(2, 9);
+        setToasts((prev) => [...prev, { id, message: customEvent.detail.message }]);
+        setTimeout(() => {
+          setToasts((prev) => prev.filter((t) => t.id !== id));
+        }, 3000);
+      }
+    };
+    window.addEventListener('show-toast', handleToastEvent);
+    return () => {
+      window.removeEventListener('show-toast', handleToastEvent);
+    };
+  }, []);
+
   // Navigation & View States
   const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'tickets' | 'followups' | 'settings' | 'users' | 'debug'>('dashboard');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -57,11 +92,19 @@ export default function App() {
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
 
+  const effectiveUser = AUTH_ENABLED ? sessionUser : bypassAdminUser;
+
   // Core Data States
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [config, setConfig] = useState<SyncConfig>({ webAppUrl: '', isLiveMode: false });
+
+  // Google Sheets Sync & Auto Save States
+  const [syncStatus, setSyncStatus] = useState<'CONNECTING' | 'LIVE' | 'SYNCING' | 'OFFLINE'>('CONNECTING');
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
+  const [retryCountdown, setRetryCountdown] = useState<number>(30);
+  const [globalSaveStatus, setGlobalSaveStatus] = useState<'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED'>('IDLE');
 
   // Status States
   const [isLoading, setIsLoading] = useState(false);
@@ -80,20 +123,82 @@ export default function App() {
     }
     
     // Auto-trigger setup wizard if not complete and no local users configured
-    if (!storedConfig.setupComplete && !localStorage.getItem('move_abroad_crm_users')) {
+    if (AUTH_ENABLED && !storedConfig.setupComplete && !localStorage.getItem('move_abroad_crm_users')) {
       setShowSetupWizard(true);
     }
   }, []);
 
+  // Listen for global autosave status changes
+  useEffect(() => {
+    const handleSaveStatusEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ status: 'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED' }>;
+      if (customEvent.detail && customEvent.detail.status) {
+        setGlobalSaveStatus(customEvent.detail.status);
+      }
+    };
+    window.addEventListener('set-save-status', handleSaveStatusEvent);
+    return () => {
+      window.removeEventListener('set-save-status', handleSaveStatusEvent);
+    };
+  }, []);
+
+  // Warning when leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (globalSaveStatus === 'EDITING' || globalSaveStatus === 'SAVING') {
+        const msg = 'UNSAVED CHANGES DETECTED';
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [globalSaveStatus]);
+
+  // Polling for offline auto-reconnection
+  useEffect(() => {
+    let interval: any = null;
+    if (syncStatus === 'OFFLINE' && config.isLiveMode) {
+      interval = setInterval(() => {
+        setRetryCountdown(prev => {
+          if (prev <= 1) {
+            // Trigger auto-reconnect attempt
+            loadCRMData(config);
+            return 30;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setRetryCountdown(30);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [syncStatus, config]);
+
+  // Periodic tick to update human-readable last sync text
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Sync data automatically whenever config is loaded or updated and session is authenticated
   useEffect(() => {
-    if (sessionUser) {
+    if (effectiveUser) {
       loadCRMData(config);
     }
-  }, [config, sessionUser]);
+  }, [config, effectiveUser]);
 
   // Load / Sync Data helper
   const loadCRMData = async (currentConfig: SyncConfig) => {
+    setSyncStatus('SYNCING');
     setIsLoading(true);
     setGlobalError(null);
     try {
@@ -101,8 +206,12 @@ export default function App() {
       setCustomers(data.customers);
       setTickets(data.tickets);
       setFollowUps(data.followUps || []);
+      setSyncStatus('LIVE');
+      setLastSyncTime(new Date());
     } catch (err: any) {
       console.error('Data Sync Error:', err);
+      setSyncStatus('OFFLINE');
+      setRetryCountdown(30);
       setGlobalError(
         currentConfig.isLiveMode 
           ? 'Failed to sync with Google Sheets. Please verify your Apps Script URL or network connection.' 
@@ -124,6 +233,27 @@ export default function App() {
     saveSyncConfig(newConfig);
   };
 
+  // Generic Auto-Save wrapper to trigger global status events
+  const wrapSave = async <T,>(action: () => Promise<T>): Promise<T> => {
+    window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVING' } }));
+    try {
+      const res = await action();
+      const isSuccess = (res as any)?.success !== false;
+      if (isSuccess) {
+        window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVED' } }));
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'IDLE' } }));
+        }, 1500);
+      } else {
+        window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'FAILED' } }));
+      }
+      return res;
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'FAILED' } }));
+      throw err;
+    }
+  };
+
   // Event handler: Create customer API proxy
   const handleAddCustomer = async (
     name: string, 
@@ -131,13 +261,16 @@ export default function App() {
     whatsAppNumber: string = '',
     destinationCountry: string = '',
     source: string = 'Other',
-    remarks: string = ''
+    remarks: string = '',
+    imoNumber: string = ''
   ) => {
-    const res = await addCustomer(config, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks);
-    if (res.success && res.customer) {
-      setCustomers(prev => [...prev, res.customer!]);
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await addCustomer(config, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber);
+      if (res.success && res.customer) {
+        setCustomers(prev => [...prev, res.customer!]);
+      }
+      return res;
+    });
   };
 
   // Event handler: Update customer API proxy
@@ -148,49 +281,56 @@ export default function App() {
     whatsAppNumber: string = '',
     destinationCountry: string = '',
     source: string = 'Other',
-    remarks: string = ''
+    remarks: string = '',
+    imoNumber: string = ''
   ) => {
-    const res = await updateCustomer(config, id, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks);
-    if (res.success) {
-      // Sync local customers state
-      setCustomers(prev => prev.map(c => c.id === id ? { 
-        ...c, 
-        name, 
-        mobileNumber,
-        whatsAppNumber,
-        destinationCountry,
-        source,
-        remarks
-      } : c));
-      // Sync local tickets cache
-      setTickets(prev => prev.map(t => t.customerId === id ? { ...t, name, mobileNumber } : t));
-      // Sync local follow-ups cache
-      setFollowUps(prev => prev.map(f => f.customerId === id ? { ...f, name, mobileNumber } : f));
-      
-      // Update selected candidate state
-      setSelectedCustomer(prev => prev && prev.id === id ? { 
-        ...prev, 
-        name, 
-        mobileNumber,
-        whatsAppNumber,
-        destinationCountry,
-        source,
-        remarks
-      } : prev);
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await updateCustomer(config, id, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber);
+      if (res.success) {
+        // Sync local customers state
+        setCustomers(prev => prev.map(c => c.id === id ? { 
+          ...c, 
+          name, 
+          mobileNumber,
+          whatsAppNumber,
+          imoNumber,
+          destinationCountry,
+          source,
+          remarks
+        } : c));
+        // Sync local tickets cache
+        setTickets(prev => prev.map(t => t.customerId === id ? { ...t, name, mobileNumber } : t));
+        // Sync local follow-ups cache
+        setFollowUps(prev => prev.map(f => f.customerId === id ? { ...f, name, mobileNumber } : f));
+        
+        // Update selected candidate state
+        setSelectedCustomer(prev => prev && prev.id === id ? { 
+          ...prev, 
+          name, 
+          mobileNumber,
+          whatsAppNumber,
+          imoNumber,
+          destinationCountry,
+          source,
+          remarks
+        } : prev);
+      }
+      return res;
+    });
   };
 
   // Event handler: Delete customer API proxy (Cascade deletes associated tickets & follow-ups)
   const handleDeleteCustomer = async (id: string) => {
-    const res = await deleteCustomer(config, id);
-    if (res.success) {
-      setCustomers(prev => prev.filter(c => c.id !== id));
-      setTickets(prev => prev.filter(t => t.customerId !== id));
-      setFollowUps(prev => prev.filter(f => f.customerId !== id));
-      setSelectedCustomer(null);
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await deleteCustomer(config, id);
+      if (res.success) {
+        setCustomers(prev => prev.filter(c => c.id !== id));
+        setTickets(prev => prev.filter(t => t.customerId !== id));
+        setFollowUps(prev => prev.filter(f => f.customerId !== id));
+        setSelectedCustomer(null);
+      }
+      return res;
+    });
   };
 
   // Event handler: Create ticket API proxy
@@ -201,34 +341,40 @@ export default function App() {
     conversationDescription: string,
     status: Ticket['status']
   ) => {
-    const res = await createTicket(config, customerId, name, mobileNumber, conversationDescription, status);
-    if (res.success && res.ticket) {
-      setTickets(prev => [...prev, res.ticket!]);
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await createTicket(config, customerId, name, mobileNumber, conversationDescription, status);
+      if (res.success && res.ticket) {
+        setTickets(prev => [...prev, res.ticket!]);
+      }
+      return res;
+    });
   };
 
   // Event handler: Update ticket API proxy
   const handleUpdateTicket = async (id: string, updates: Partial<Ticket>) => {
-    const res = await updateTicket(
-      config,
-      id,
-      updates.conversationDescription || '',
-      updates.status || 'Open'
-    );
-    if (res.success) {
-      setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await updateTicket(
+        config,
+        id,
+        updates.conversationDescription || '',
+        updates.status || 'Open'
+      );
+      if (res.success) {
+        setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+      }
+      return res;
+    });
   };
 
   // Event handler: Delete ticket API proxy
   const handleDeleteTicket = async (id: string) => {
-    const res = await deleteTicket(config, id);
-    if (res.success) {
-      setTickets(prev => prev.filter(t => t.id !== id));
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await deleteTicket(config, id);
+      if (res.success) {
+        setTickets(prev => prev.filter(t => t.id !== id));
+      }
+      return res;
+    });
   };
 
   // Event handler: Create follow-up API proxy
@@ -241,38 +387,45 @@ export default function App() {
     notes: string,
     status: 'Pending' | 'Completed'
   ) => {
-    const res = await createFollowUp(config, customerId, name, mobileNumber, followUpDate, followUpTime, notes, status);
-    if (res.success && res.followUp) {
-      setFollowUps(prev => [...prev, res.followUp!]);
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await createFollowUp(config, customerId, name, mobileNumber, followUpDate, followUpTime, notes, status);
+      if (res.success && res.followUp) {
+        setFollowUps(prev => [...prev, res.followUp!]);
+      }
+      return res;
+    });
   };
 
   // Event handler: Update/Complete follow-up API proxy
   const handleUpdateFollowUp = async (id: string, updates: Partial<FollowUp>) => {
-    const existing = followUps.find(f => f.id === id);
-    if (!existing) return { success: false, error: 'Follow-up not found' };
-    
-    const date = updates.followUpDate ?? existing.followUpDate;
-    const time = updates.followUpTime ?? existing.followUpTime;
-    const notes = updates.notes ?? existing.notes;
-    const status = updates.status ?? existing.status;
+    return wrapSave(async () => {
+      const existing = followUps.find(f => f.id === id);
+      if (!existing) return { success: false, error: 'Follow-up not found' };
+      
+      const date = updates.followUpDate ?? existing.followUpDate;
+      const time = updates.followUpTime ?? existing.followUpTime;
+      const notes = updates.notes ?? existing.notes;
+      const status = updates.status ?? existing.status;
 
-    const res = await updateFollowUp(config, id, date, time, notes, status);
-    if (res.success) {
-      setFollowUps(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
-    }
-    return res;
+      const res = await updateFollowUp(config, id, date, time, notes, status);
+      if (res.success) {
+        setFollowUps(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+      }
+      return res;
+    });
   };
 
   // Event handler: Delete follow-up API proxy
   const handleDeleteFollowUp = async (id: string) => {
-    const res = await deleteFollowUp(config, id);
-    if (res.success) {
-      setFollowUps(prev => prev.filter(f => f.id !== id));
-    }
-    return res;
+    return wrapSave(async () => {
+      const res = await deleteFollowUp(config, id);
+      if (res.success) {
+        setFollowUps(prev => prev.filter(f => f.id !== id));
+      }
+      return res;
+    });
   };
+
 
   // Navigation controller helper: Open Customer profile details
   const handleSelectCustomer = (customer: Customer) => {
@@ -307,7 +460,7 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  if (showSetupWizard) {
+  if (AUTH_ENABLED && showSetupWizard) {
     return (
       <SetupWizard 
         onSetupComplete={(newConfig) => {
@@ -319,7 +472,7 @@ export default function App() {
     );
   }
 
-  if (!sessionUser) {
+  if (AUTH_ENABLED && !sessionUser) {
     return (
       <LoginScreen 
         config={config} 
@@ -330,72 +483,142 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0] flex flex-col font-sans text-[#2c2c26] selection:bg-[#5A5A40]/20 selection:text-[#2c2c26] antialiased">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-[#2c2c26] selection:bg-[#5A5A40]/20 selection:text-[#2c2c26] antialiased">
       
       {/* Top Main Navigation Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-[#5A5A40]/10 shadow-xs px-4 py-3.5">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm">
-              M
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-[#5A5A40]/10 shadow-xs px-4 py-3">
+        <div className="max-w-5xl mx-auto flex flex-col gap-2.5 sm:gap-0 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-primary-olive flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm">
+                M
+              </div>
+              <div>
+                <h1 className="font-serif font-bold text-lg text-primary-olive tracking-tight leading-tight">MoveAboard CRM</h1>
+              </div>
             </div>
-            <div>
-              <h1 className="font-serif font-bold text-lg text-[#5A5A40] tracking-tight leading-tight">MoveAbroad CRM</h1>
-              <p className="text-[10px] text-[#5A5A40]/60 font-semibold tracking-wider uppercase">Visa & Agency Hub</p>
+            
+            {/* Mobile sync indicators & actions */}
+            <div className="sm:hidden flex items-center gap-1.5">
+              {globalSaveStatus !== 'IDLE' && (
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-100">
+                  {globalSaveStatus === 'EDITING' && '✏'}
+                  {globalSaveStatus === 'SAVING' && '💾'}
+                  {globalSaveStatus === 'SAVED' && '✅'}
+                  {globalSaveStatus === 'FAILED' && '❌'}
+                </span>
+              )}
+              <button
+                onClick={handleManualSync}
+                disabled={isLoading}
+                className="p-1.5 text-primary-olive/75 hover:bg-primary-olive/5 rounded-xl border border-primary-olive/10"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
             </div>
           </div>
 
-          {/* Real-time sync badge indicator */}
-          <div className="flex items-center gap-2.5">
-            {isLoading && (
-              <Loader2 className="w-4 h-4 animate-spin text-[#5A5A40]" />
+          {/* Controls and Sync States */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            {/* Global Auto-Save Status */}
+            {globalSaveStatus !== 'IDLE' && (
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
+                {globalSaveStatus === 'EDITING' && <span>✏ EDITING...</span>}
+                {globalSaveStatus === 'SAVING' && <span className="animate-pulse">💾 SAVING...</span>}
+                {globalSaveStatus === 'SAVED' && <span className="text-emerald-600">✅ SAVED</span>}
+                {globalSaveStatus === 'FAILED' && <span className="text-rose-600 animate-bounce">❌ SAVE FAILED</span>}
+              </span>
             )}
-            
+
+            {/* Live Sheets Sync Indicator */}
+            {(() => {
+              if (!config.isLiveMode) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-amber-50 text-amber-800 border-amber-200">
+                    <WifiOff className="w-3.5 h-3.5 text-amber-500" />
+                    <span>DEMO MODE</span>
+                  </span>
+                );
+              }
+
+              const timeString = lastSyncTime 
+                ? (() => {
+                    const secs = Math.floor((new Date().getTime() - lastSyncTime.getTime()) / 1000);
+                    if (secs < 5) return 'JUST NOW';
+                    if (secs < 60) return `${secs}S AGO`;
+                    const mins = Math.floor(secs / 60);
+                    if (mins < 60) return `${mins}M AGO`;
+                    return lastSyncTime.toLocaleTimeString();
+                  })()
+                : 'NEVER';
+
+              switch (syncStatus) {
+                case 'CONNECTING':
+                  return (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-slate-100 text-slate-700 border-slate-200 animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                      <span>⚪ CONNECTING...</span>
+                    </span>
+                  );
+                case 'SYNCING':
+                  return (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-amber-100 text-amber-800 border-amber-200">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                      <span>🟡 SYNCING...</span>
+                    </span>
+                  );
+                case 'OFFLINE':
+                  return (
+                    <span 
+                      onClick={() => loadCRMData(config)}
+                      title={`Offline. Retrying in ${retryCountdown}s. Click to retry.`}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-rose-100 text-rose-800 border-rose-200 cursor-pointer animate-pulse"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                      <span>🔴 OFFLINE (RETRY IN {retryCountdown}S)</span>
+                    </span>
+                  );
+                case 'LIVE':
+                default:
+                  return (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-200">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></span>
+                      <span>🟢 LIVE (SYNCED: {timeString})</span>
+                    </span>
+                  );
+              }
+            })()}
+
+            {/* Force sync action button */}
             <button
               onClick={handleManualSync}
               disabled={isLoading}
               title="Force Sync Now"
-              className="p-1.5 text-[#5A5A40]/75 hover:text-[#5A5A40] hover:bg-[#5A5A40]/5 rounded-xl border border-[#5A5A40]/10 active:scale-95 transition-all cursor-pointer"
+              className="p-1.5 text-primary-olive/75 hover:text-primary-olive hover:bg-primary-olive/5 rounded-xl border border-primary-olive/10 active:scale-95 transition-all cursor-pointer h-[32px] w-[32px] flex items-center justify-center shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
 
-            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-3 py-1 rounded-full border ${
-              config.isLiveMode 
-                ? 'bg-[#5A5A40]/10 text-[#5A5A40] border-[#5A5A40]/20' 
-                : 'bg-amber-50 text-amber-800 border-amber-200'
-            }`}>
-              {config.isLiveMode ? (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-[#5A5A40]" />
-                  <span>SHEETS LIVE</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3.5 h-3.5 text-amber-500" />
-                  <span>DEMO MODE</span>
-                </>
-              )}
-            </span>
-
-            {sessionUser && (
+            {effectiveUser && (
               <>
-                <div className="h-6 w-[1px] bg-slate-200 hidden sm:block"></div>
+                <div className="hidden sm:block h-6 w-[1px] bg-slate-200"></div>
                 
                 <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex flex-col text-right">
-                    <span className="text-xs font-bold text-slate-800 leading-none">{sessionUser.fullName}</span>
-                    <span className="text-[9px] font-semibold text-emerald-700 uppercase tracking-wider mt-0.5">{sessionUser.role}</span>
+                  <div className="hidden md:flex flex-col text-right">
+                    <span className="text-xs font-bold text-slate-800 leading-none">{effectiveUser.fullName}</span>
+                    <span className="text-[9px] font-semibold text-emerald-700 uppercase tracking-wider mt-0.5">{effectiveUser.role}</span>
                   </div>
-                  <button
-                    onClick={handleLogout}
-                    className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl border border-red-100 transition-colors cursor-pointer flex items-center gap-1"
-                    title="Log Out"
-                    id="header-logout-btn"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span className="text-xs font-semibold hidden md:inline">Logout</span>
-                  </button>
+                  {AUTH_ENABLED && (
+                    <button
+                      onClick={handleLogout}
+                      className="px-2.5 py-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl border border-red-100 transition-all cursor-pointer flex items-center gap-1 min-h-[32px]"
+                      title="Log Out"
+                      id="header-logout-btn"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-semibold">Logout</span>
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -460,30 +683,36 @@ export default function App() {
                   setSelectedCustomer(null);
                   setActiveTab('tickets');
                 }}
+                currentUser={effectiveUser}
               />
             )}
 
             {/* 2. Customers Directory View */}
             {activeTab === 'customers' && (
               <div className="space-y-5 max-w-4xl mx-auto">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
-                    <h2 className="text-xl font-serif font-bold text-[#5A5A40] tracking-tight">Candidate Profiles</h2>
-                    <p className="text-xs text-[#5A5A40]/60">Manage overseas visa candidates and lookup history</p>
+                    <h2 className="text-xl font-serif font-bold text-[#5A5A40] tracking-tight">Customer Profiles</h2>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-[#5A5A40]/60">Manage customer profiles and lookup interaction history</p>
+                      <span className="text-[10px] font-bold bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#8a8a70]/20 dark:text-[#ecece5] px-2 py-0.5 rounded-full">
+                        {customers.length} total
+                      </span>
+                    </div>
                   </div>
                   
                   <button
                     onClick={() => setIsAddingCustomerInline(!isAddingCustomerInline)}
-                    id="btn-toggle-add-candidate"
-                    className="inline-flex items-center gap-1 bg-[#5A5A40] hover:bg-[#4a4a34] text-white text-xs font-semibold px-4 py-2 rounded-full cursor-pointer transition-colors shadow-sm"
+                    id="btn-toggle-add-customer"
+                    className="inline-flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white text-xs font-medium px-4 py-2.5 rounded-full cursor-pointer transition-all shadow-sm active:scale-95"
                   >
-                    <Plus className="w-4 h-4" />
-                    {isAddingCustomerInline ? 'Search Directory' : 'Register Candidate'}
+                    <UserPlus className="w-4 h-4" />
+                    <span>{isAddingCustomerInline ? 'SEARCH DIRECTORY' : '+ ADD CUSTOMER'}</span>
                   </button>
                 </div>
 
                 {isAddingCustomerInline ? (
-                  <div className="max-w-md mx-auto">
+                  <div className="w-full max-w-[700px] md:w-[90%] mx-auto px-4 sm:px-5">
                     <CustomerForm
                       onAddCustomer={handleAddCustomer}
                       existingCustomers={customers}
@@ -493,6 +722,7 @@ export default function App() {
                   <CustomerSearch
                     customers={customers}
                     tickets={tickets}
+                    followUps={followUps}
                     onSelectCustomer={handleSelectCustomer}
                     onNavigateToAddCustomer={() => setIsAddingCustomerInline(true)}
                   />
@@ -506,6 +736,7 @@ export default function App() {
                 <TicketsManager
                   customers={customers}
                   tickets={tickets}
+                  followUps={followUps}
                   onAddCustomer={handleAddCustomer}
                   onCreateTicket={handleCreateTicket}
                   onUpdateTicket={handleUpdateTicket}
@@ -521,6 +752,7 @@ export default function App() {
                 <FollowUps
                   customers={customers}
                   followUps={followUps}
+                  tickets={tickets}
                   onCreateFollowUp={handleCreateFollowUp}
                   onUpdateFollowUp={handleUpdateFollowUp}
                   onDeleteFollowUp={handleDeleteFollowUp}
@@ -528,7 +760,7 @@ export default function App() {
               </div>
             )}
 
-            {/* 5. Settings Configuration View */}
+             {/* 5. Settings Configuration View */}
             {activeTab === 'settings' && (
               <div className="max-w-3xl mx-auto">
                 <SettingsPanel
@@ -536,27 +768,27 @@ export default function App() {
                   onUpdateConfig={handleUpdateConfig}
                   onRefreshData={handleManualSync}
                   isLoading={isLoading}
-                  onOpenDebug={sessionUser?.role === 'Admin' ? () => setActiveTab('debug') : undefined}
+                  onOpenDebug={effectiveUser?.role === 'Admin' ? () => setActiveTab('debug') : undefined}
                 />
               </div>
             )}
 
             {/* 6. Admin User Management View */}
-            {activeTab === 'users' && sessionUser?.role === 'Admin' && (
+            {AUTH_ENABLED && activeTab === 'users' && effectiveUser?.role === 'Admin' && (
               <div className="max-w-4xl mx-auto">
                 <UserManagement
                   config={config}
-                  currentUser={sessionUser}
+                  currentUser={effectiveUser}
                 />
               </div>
             )}
 
             {/* 7. Admin Debug & Diagnostics View */}
-            {activeTab === 'debug' && sessionUser?.role === 'Admin' && (
+            {activeTab === 'debug' && effectiveUser?.role === 'Admin' && (
               <div className="max-w-4xl mx-auto">
                 <AdminDebug
                   config={config}
-                  currentUser={sessionUser}
+                  currentUser={effectiveUser}
                   onBack={() => setActiveTab('settings')}
                 />
               </div>
@@ -568,7 +800,7 @@ export default function App() {
 
       {/* Sticky Bottom Tab Navigation Bar (Optimized for Phones) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#5A5A40]/10 shadow-lg py-2 px-4 z-40">
-        <div className={`max-w-lg mx-auto grid ${sessionUser?.role === 'Admin' ? 'grid-cols-6' : 'grid-cols-5'} gap-1`}>
+        <div className={`max-w-lg mx-auto grid ${(AUTH_ENABLED && effectiveUser?.role === 'Admin') ? 'grid-cols-6' : 'grid-cols-5'} gap-1`}>
           
           {/* Tab 1: Dashboard */}
           <button
@@ -595,7 +827,7 @@ export default function App() {
             }`}
           >
             <Users className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px] tracking-tight">Candidates</span>
+            <span className="text-[10px] tracking-tight">Customers</span>
           </button>
 
           {/* Tab 3: Tickets */}
@@ -627,7 +859,7 @@ export default function App() {
           </button>
 
           {/* Tab 5: Users (Admin Only) */}
-          {sessionUser?.role === 'Admin' && (
+          {AUTH_ENABLED && effectiveUser?.role === 'Admin' && (
             <button
               onClick={() => handleTabNavigation('users')}
               id="tab-btn-users"
@@ -658,6 +890,30 @@ export default function App() {
 
         </div>
       </nav>
+
+      {/* Floating Toast Notifications */}
+      <div className="fixed bottom-24 right-4 sm:right-6 max-w-sm w-full sm:w-80 flex flex-col gap-2 z-50 pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
+              className="pointer-events-auto w-full bg-slate-900/95 dark:bg-black/95 text-white py-3 px-4 rounded-xl shadow-xl flex items-center justify-between border border-slate-800 backdrop-blur-xs text-xs font-semibold"
+            >
+              <span>{toast.message}</span>
+              <button 
+                type="button" 
+                onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+                className="text-white/60 hover:text-white ml-3 transition-colors text-xs font-bold px-1.5 py-0.5 rounded-md hover:bg-white/10"
+              >
+                ✕
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

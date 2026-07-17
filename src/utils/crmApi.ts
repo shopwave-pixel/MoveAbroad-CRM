@@ -145,143 +145,31 @@ const INITIAL_USERS: User[] = [
   }
 ];
 
-const INITIAL_CUSTOMERS: Customer[] = [
-  {
-    id: 'CUS-000001',
-    name: 'Emma Watson',
-    mobileNumber: '+44 7911 123456',
-    whatsAppNumber: '+44 7911 123456',
-    destinationCountry: 'United Kingdom',
-    source: 'Website',
-    remarks: 'Needs student visa documents',
-    createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'CUS-000002',
-    name: 'Hiroshi Tanaka',
-    mobileNumber: '+81 90 1234 5678',
-    whatsAppNumber: '+81 90 1234 5678',
-    destinationCountry: 'Japan',
-    source: 'Walk-in',
-    remarks: 'Highly skilled worker visa subclass under review',
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'CUS-000003',
-    name: 'Sophia Martinez',
-    mobileNumber: '+1 (555) 234-5678',
-    whatsAppNumber: '+1 (555) 234-5678',
-    destinationCountry: 'Canada',
-    source: 'Facebook',
-    remarks: 'Enrollment letter from University of Toronto confirmed',
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'CUS-000004',
-    name: 'Liam Chen',
-    mobileNumber: '+65 9123 4567',
-    whatsAppNumber: '+65 9123 4567',
-    destinationCountry: 'Germany',
-    source: 'Other',
-    remarks: 'Awaiting B2 German language test score sheet',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  }
-];
+const INITIAL_CUSTOMERS: Customer[] = [];
 
-const INITIAL_TICKETS: Ticket[] = [
-  {
-    id: 'TKT-000001',
-    customerId: 'CUS-000001',
-    name: 'Emma Watson',
-    mobileNumber: '+44 7911 123456',
-    conversationDescription: 'Inquired about Tier 2 UK Visa requirements and processing times. Highly motivated to start by September.',
-    status: 'Pending',
-    createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'TKT-000002',
-    customerId: 'CUS-000002',
-    name: 'Hiroshi Tanaka',
-    mobileNumber: '+81 90 1234 5678',
-    conversationDescription: 'Submitted all documents for the skilled worker visa subclass 189 Australia. Waiting for receipt reference from the embassy.',
-    status: 'Open',
-    createdAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'TKT-000003',
-    customerId: 'CUS-000001',
-    name: 'Emma Watson',
-    mobileNumber: '+44 7911 123456',
-    conversationDescription: 'Completed document evaluation. Sent list of missing academic references and employer logs.',
-    status: 'Closed',
-    createdAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'TKT-000004',
-    customerId: 'CUS-000003',
-    name: 'Sophia Martinez',
-    mobileNumber: '+1 (555) 234-5678',
-    conversationDescription: 'Student Visa Canada counseling. Confirmed University of Toronto enrollment letter. Scheduled academic payment sync.',
-    status: 'Closed',
-    createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'TKT-000005',
-    customerId: 'CUS-000004',
-    name: 'Liam Chen',
-    mobileNumber: '+65 9123 4567',
-    conversationDescription: 'Urgent call regarding Germany Opportunity Card points criteria. Verified B2 German and tech job offer status.',
-    status: 'Open',
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  }
-];
+const INITIAL_TICKETS: Ticket[] = [];
 
-const INITIAL_FOLLOWUPS: FollowUp[] = [
-  {
-    id: 'FUP-000001',
-    customerId: 'CUS-000001',
-    name: 'Emma Watson',
-    mobileNumber: '+44 7911 123456',
-    followUpDate: getRelativeDateString(0), // Today
-    followUpTime: '14:30',
-    notes: 'Call customer to confirm if she retrieved the official proof of employment from her previous UK employer.',
-    status: 'Pending',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'FUP-000002',
-    customerId: 'CUS-000002',
-    name: 'Hiroshi Tanaka',
-    mobileNumber: '+81 90 1234 5678',
-    followUpDate: getRelativeDateString(1), // Tomorrow
-    followUpTime: '10:00',
-    notes: 'Check embassy visa tracker portal for medical examination clearance status update.',
-    status: 'Pending',
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'FUP-000003',
-    customerId: 'CUS-000003',
-    name: 'Sophia Martinez',
-    mobileNumber: '+1 (555) 234-5678',
-    followUpDate: getRelativeDateString(-2), // 2 days ago
-    followUpTime: '11:00',
-    notes: ' Canada student biometric appointment reminder. Verified client has original passport.',
-    status: 'Completed',
-    createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-  }
-];
+const INITIAL_FOLLOWUPS: FollowUp[] = [];
 
 // Initialize local storage if not set
 export function initLocalStorage() {
-  if (!localStorage.getItem(STORAGE_KEY_CUSTOMERS)) {
-    localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
-  }
-  if (!localStorage.getItem(STORAGE_KEY_TICKETS)) {
-    localStorage.setItem(STORAGE_KEY_TICKETS, JSON.stringify(INITIAL_TICKETS));
-  }
-  if (!localStorage.getItem(STORAGE_KEY_FOLLOWUPS)) {
-    localStorage.setItem(STORAGE_KEY_FOLLOWUPS, JSON.stringify(INITIAL_FOLLOWUPS));
+  const existingCustomers = localStorage.getItem(STORAGE_KEY_CUSTOMERS);
+  // Clear any existing cached demo records to guarantee a clean start
+  if (!existingCustomers || existingCustomers.includes('Emma Watson') || existingCustomers.includes('Sophia Martinez')) {
+    localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_TICKETS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_FOLLOWUPS, JSON.stringify([]));
+  } else {
+    // Just ensure structure is correct
+    if (!localStorage.getItem(STORAGE_KEY_CUSTOMERS)) {
+      localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify([]));
+    }
+    if (!localStorage.getItem(STORAGE_KEY_TICKETS)) {
+      localStorage.setItem(STORAGE_KEY_TICKETS, JSON.stringify([]));
+    }
+    if (!localStorage.getItem(STORAGE_KEY_FOLLOWUPS)) {
+      localStorage.setItem(STORAGE_KEY_FOLLOWUPS, JSON.stringify([]));
+    }
   }
   if (!localStorage.getItem(STORAGE_KEY_USERS)) {
     localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(INITIAL_USERS));
@@ -335,14 +223,26 @@ export async function fetchCRMData(config: SyncConfig): Promise<CRMData> {
       
       const data = await response.json();
       if (data.success) {
+        // Convert any 'Pending' tickets to 'Open'
+        const migratedTickets = (data.tickets || []).map((t: any) => ({
+          ...t,
+          status: t.status === 'Pending' ? 'Open' : t.status
+        }));
+        
+        // Deduplicate arrays by id to prevent runtime React key duplicate errors
+        const uniqueCustomers = Array.from(new Map((data.customers || []).map((c: any) => [c.id, c])).values()) as Customer[];
+        const uniqueTickets = Array.from(new Map(migratedTickets.map((t: any) => [t.id, t])).values()) as Ticket[];
+        const uniqueFollowUps = Array.from(new Map((data.followUps || []).map((f: any) => [f.id, f])).values()) as FollowUp[];
+
         // Cache locally for offline resilience
-        localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(data.customers || []));
-        localStorage.setItem(STORAGE_KEY_TICKETS, JSON.stringify(data.tickets || []));
-        localStorage.setItem(STORAGE_KEY_FOLLOWUPS, JSON.stringify(data.followUps || []));
+        localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(uniqueCustomers));
+        localStorage.setItem(STORAGE_KEY_TICKETS, JSON.stringify(uniqueTickets));
+        localStorage.setItem(STORAGE_KEY_FOLLOWUPS, JSON.stringify(uniqueFollowUps));
+        
         return {
-          customers: data.customers || [],
-          tickets: data.tickets || [],
-          followUps: data.followUps || []
+          customers: uniqueCustomers,
+          tickets: uniqueTickets,
+          followUps: uniqueFollowUps
         };
       } else {
         throw new Error(data.error || 'Failed to fetch data from Sheets backend');
@@ -355,10 +255,33 @@ export async function fetchCRMData(config: SyncConfig): Promise<CRMData> {
 
   // Fallback to local storage
   initLocalStorage();
-  const customers = JSON.parse(localStorage.getItem(STORAGE_KEY_CUSTOMERS) || '[]');
-  const tickets = JSON.parse(localStorage.getItem(STORAGE_KEY_TICKETS) || '[]');
-  const followUps = JSON.parse(localStorage.getItem(STORAGE_KEY_FOLLOWUPS) || '[]');
-  return { customers, tickets, followUps };
+  const rawCustomers = JSON.parse(localStorage.getItem(STORAGE_KEY_CUSTOMERS) || '[]');
+  const rawTickets = JSON.parse(localStorage.getItem(STORAGE_KEY_TICKETS) || '[]');
+  
+  // Convert any 'Pending' tickets to 'Open'
+  let hasPending = false;
+  const migratedTickets = rawTickets.map((t: any) => {
+    if (t.status === 'Pending') {
+      hasPending = true;
+      return { ...t, status: 'Open' };
+    }
+    return t;
+  });
+  
+  const rawFollowUps = JSON.parse(localStorage.getItem(STORAGE_KEY_FOLLOWUPS) || '[]');
+
+  // Deduplicate fallback data
+  const uniqueCustomers = Array.from(new Map(rawCustomers.map((c: any) => [c.id, c])).values()) as Customer[];
+  const uniqueTickets = Array.from(new Map(migratedTickets.map((t: any) => [t.id, t])).values()) as Ticket[];
+  const uniqueFollowUps = Array.from(new Map(rawFollowUps.map((f: any) => [f.id, f])).values()) as FollowUp[];
+
+  if (hasPending || rawTickets.length !== uniqueTickets.length || rawCustomers.length !== uniqueCustomers.length || rawFollowUps.length !== uniqueFollowUps.length) {
+    localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(uniqueCustomers));
+    localStorage.setItem(STORAGE_KEY_TICKETS, JSON.stringify(uniqueTickets));
+    localStorage.setItem(STORAGE_KEY_FOLLOWUPS, JSON.stringify(uniqueFollowUps));
+  }
+
+  return { customers: uniqueCustomers, tickets: uniqueTickets, followUps: uniqueFollowUps };
 }
 
 // Fetch only customers
@@ -391,7 +314,8 @@ export async function addCustomer(
   whatsAppNumber: string = '',
   destinationCountry: string = '',
   source: string = 'Other',
-  remarks: string = ''
+  remarks: string = '',
+  imoNumber: string = ''
 ): Promise<{ success: boolean; customer?: Customer; error?: string }> {
   const trimmedName = name.trim();
   const trimmedMobile = mobileNumber.trim();
@@ -411,7 +335,8 @@ export async function addCustomer(
           whatsAppNumber: whatsAppNumber.trim(),
           destinationCountry: destinationCountry.trim(),
           source: source,
-          remarks: remarks.trim()
+          remarks: remarks.trim(),
+          imoNumber: imoNumber.trim()
         })
       });
 
@@ -461,6 +386,7 @@ export async function addCustomer(
     name: trimmedName,
     mobileNumber: trimmedMobile,
     whatsAppNumber: whatsAppNumber.trim(),
+    imoNumber: imoNumber.trim(),
     destinationCountry: destinationCountry.trim(),
     source: source,
     remarks: remarks.trim(),
@@ -482,7 +408,8 @@ export async function updateCustomer(
   whatsAppNumber: string = '',
   destinationCountry: string = '',
   source: string = 'Other',
-  remarks: string = ''
+  remarks: string = '',
+  imoNumber: string = ''
 ): Promise<{ success: boolean; error?: string }> {
   const trimmedName = name.trim();
   const trimmedMobile = mobileNumber.trim();
@@ -503,7 +430,8 @@ export async function updateCustomer(
           whatsAppNumber: whatsAppNumber.trim(),
           destinationCountry: destinationCountry.trim(),
           source: source,
-          remarks: remarks.trim()
+          remarks: remarks.trim(),
+          imoNumber: imoNumber.trim()
         })
       });
 
@@ -520,6 +448,7 @@ export async function updateCustomer(
           name: trimmedName, 
           mobileNumber: trimmedMobile,
           whatsAppNumber: whatsAppNumber.trim(),
+          imoNumber: imoNumber.trim(),
           destinationCountry: destinationCountry.trim(),
           source: source,
           remarks: remarks.trim()
@@ -560,6 +489,7 @@ export async function updateCustomer(
     name: trimmedName, 
     mobileNumber: trimmedMobile,
     whatsAppNumber: whatsAppNumber.trim(),
+    imoNumber: imoNumber.trim(),
     destinationCountry: destinationCountry.trim(),
     source: source,
     remarks: remarks.trim()
@@ -1568,4 +1498,8 @@ export async function runSystemTests(
   }
 
   return results;
+}
+
+export function triggerSaveStatus(status: 'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED') {
+  window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status } }));
 }

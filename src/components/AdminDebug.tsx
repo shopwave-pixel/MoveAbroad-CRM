@@ -17,7 +17,7 @@ import {
   Check,
   AlertTriangle
 } from 'lucide-react';
-import { SyncConfig, User as UserType, Customer, Ticket, FollowUp } from '../types';
+import { SyncConfig, User as UserType } from '../types';
 import { 
   lastApiResponse, 
   lastApiError, 
@@ -173,12 +173,10 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
 
       // --- STEP 4: Login as Staff ---
       updateStep('login_staff', 'running');
-      // Login durjoy or the newly created test staff
       const loginStaffRes = await loginUser(targetConfig, 'durjoy', '2026');
       if (loginStaffRes.success) {
         updateStep('login_staff', 'success', `Logged in as Staff: ${loginStaffRes.user?.fullName} (Status: ${loginStaffRes.user?.status})`);
       } else {
-        // Fall back to newly created staff
         const fallbackRes = await loginUser(targetConfig, testStaffLogin, 'staff123');
         if (fallbackRes.success) {
           updateStep('login_staff', 'success', `Logged in as dynamic staff: ${fallbackRes.user?.fullName}`);
@@ -203,7 +201,6 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
 
       // --- STEP 6: Refresh/Restore Session ---
       updateStep('refresh_session', 'running');
-      // Set mock session to verify restoration
       const mockUser: UserType = {
         id: 'USR-MOCK01',
         fullName: 'Test Restore User',
@@ -226,7 +223,6 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
         updateStep('refresh_session', 'failed', 'Could not restore session from cache.');
       }
       
-      // Clean up mock session
       localStorage.removeItem('move_abroad_crm_session');
 
       await new Promise(r => setTimeout(r, 600));
@@ -323,19 +319,20 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
   };
 
   return (
-    <div className="space-y-6" id="admin-debug-page">
+    <div className="space-y-6 pb-12" id="admin-debug-page">
       {/* Header Panel */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
           <button 
             onClick={onBack}
-            className="p-2 bg-[#5A5A40]/10 hover:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] rounded-full transition-all cursor-pointer"
+            className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition-all cursor-pointer active:scale-95"
+            aria-label="Back to previous view"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="font-serif font-bold text-2xl text-[#5A5A40] dark:text-[#ecece5]">CRM Debug & Diagnostics</h1>
-            <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">
+            <h1 className="font-serif font-bold text-2xl text-gray-800 uppercase tracking-tight">CRM Debug & Diagnostics</h1>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
               Real-time API monitoring, environment variables, and system integration testing
             </p>
           </div>
@@ -344,10 +341,10 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
         <button
           onClick={loadStatus}
           disabled={isRefreshing}
-          className="flex items-center gap-2 text-xs font-bold bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 hover:bg-[#5A5A40]/20 text-[#5A5A40] dark:text-[#ecece5] px-4.5 py-2.5 rounded-full transition-all cursor-pointer disabled:opacity-50"
+          className="flex items-center justify-center gap-2 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-full transition-all cursor-pointer disabled:opacity-50 uppercase"
         >
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh Stats
+          <span>Refresh Stats</span>
         </button>
       </div>
 
@@ -355,25 +352,25 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         
         {/* Card 1: API Configuration */}
-        <div className="bg-white dark:bg-[#20201a] p-5 rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 space-y-3">
-          <div className="flex items-center gap-2 text-[#5A5A40] dark:text-[#ecece5]">
-            <Server className="w-5 h-5 text-[#5A5A40]" />
-            <h2 className="font-serif font-bold text-base">API Configuration</h2>
+        <div className="bg-white p-5 rounded-[20px] border border-gray-200 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
+            <Server className="w-4.5 h-4.5 text-slate-700" />
+            <h2 className="font-serif font-bold text-sm text-gray-800 uppercase tracking-tight">API Configuration</h2>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div>
-              <p className="text-[10px] font-bold text-[#5A5A40]/50 dark:text-[#8a8a70] uppercase">Target Endpoint Mode</p>
-              <span className={`inline-block text-xs px-2.5 py-1 rounded-full font-bold ${
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Target Endpoint Mode</p>
+              <span className={`inline-block text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider border ${
                 config.isLiveMode 
-                  ? 'bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#5A5A40]/20 dark:text-[#ecece5]' 
-                  : 'bg-amber-50 text-amber-800 dark:bg-amber-950/20 dark:text-amber-400'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                  : 'bg-amber-50 text-amber-700 border-amber-100'
               }`}>
                 {config.isLiveMode ? 'LIVE Mode (Google Sheets)' : 'DEMO Mode (LocalStorage)'}
               </span>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-[#5A5A40]/50 dark:text-[#8a8a70] uppercase">Configured Web App URL</p>
-              <p className="text-xs break-all font-mono text-[#2c2c26]/80 dark:text-[#ecece5]/80 bg-[#f5f5f0]/60 dark:bg-[#151510]/60 p-2 rounded-lg border border-[#5A5A40]/10">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Configured Web App URL</p>
+              <p className="text-[11px] break-all font-mono text-gray-600 bg-slate-50 p-2.5 rounded-xl border border-gray-100 leading-normal uppercase">
                 {config.webAppUrl || 'No Custom URL Saved'}
               </p>
             </div>
@@ -381,117 +378,117 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
         </div>
 
         {/* Card 2: Engine Connectivity */}
-        <div className="bg-white dark:bg-[#20201a] p-5 rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 space-y-3">
-          <div className="flex items-center gap-2 text-[#5A5A40] dark:text-[#ecece5]">
-            <Cpu className="w-5 h-5 text-[#5A5A40]" />
-            <h2 className="font-serif font-bold text-base">Connectivity Status</h2>
+        <div className="bg-white p-5 rounded-[20px] border border-gray-200 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
+            <Cpu className="w-4.5 h-4.5 text-slate-700" />
+            <h2 className="font-serif font-bold text-sm text-gray-800 uppercase tracking-tight">Connectivity Status</h2>
           </div>
-          <div className="space-y-3 pt-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-[#5A5A40]/70 dark:text-[#8a8a70]">Backend Connected:</span>
+          <div className="space-y-3 pt-0.5">
+            <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Backend Connected:</span>
               <span className="flex items-center gap-1.5 text-xs font-bold">
                 {backendStatus === 'checking' && (
-                  <span className="text-slate-400">Checking...</span>
+                  <span className="text-slate-400 animate-pulse uppercase">Checking...</span>
                 )}
                 {backendStatus === 'connected' && (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span className="text-emerald-700">ONLINE</span>
+                    <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />
+                    <span className="text-emerald-700 uppercase">ONLINE</span>
                   </>
                 )}
                 {backendStatus === 'disconnected' && (
                   <>
-                    <XCircle className="w-4 h-4 text-rose-600" />
-                    <span className="text-rose-700">OFFLINE</span>
+                    <XCircle className="w-4.5 h-4.5 text-rose-600" />
+                    <span className="text-rose-700 uppercase">OFFLINE</span>
                   </>
                 )}
               </span>
             </div>
 
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-[#5A5A40]/70 dark:text-[#8a8a70]">Google Sheets Ready:</span>
+            <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Google Sheets Ready:</span>
               <span className="flex items-center gap-1.5 text-xs font-bold">
                 {sheetsStatus === 'checking' && (
-                  <span className="text-slate-400">Checking...</span>
+                  <span className="text-slate-400 animate-pulse uppercase">Checking...</span>
                 )}
                 {sheetsStatus === 'connected' && (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span className="text-emerald-700">CONNECTED</span>
+                    <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />
+                    <span className="text-emerald-700 uppercase">CONNECTED</span>
                   </>
                 )}
                 {sheetsStatus === 'disconnected' && (
                   <>
-                    <XCircle className="w-4 h-4 text-rose-600" />
-                    <span className="text-rose-700">FAILED / UNINITIALIZED</span>
+                    <XCircle className="w-4.5 h-4.5 text-rose-600" />
+                    <span className="text-rose-700 uppercase">FAILED</span>
                   </>
                 )}
               </span>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[#5A5A40]/70 dark:text-[#8a8a70]">Total Registered Users:</span>
-              <span className="text-xs font-bold text-[#5A5A40] dark:text-[#ecece5] bg-[#5A5A40]/10 px-2.5 py-0.5 rounded-full">
-                {usersCount} Users
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Active Users:</span>
+              <span className="text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full uppercase">
+                {usersCount} Accounts
               </span>
             </div>
           </div>
         </div>
 
         {/* Card 3: Session Profile */}
-        <div className="bg-white dark:bg-[#20201a] p-5 rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 space-y-3">
-          <div className="flex items-center gap-2 text-[#5A5A40] dark:text-[#ecece5]">
-            <Shield className="w-5 h-5 text-[#5A5A40]" />
-            <h2 className="font-serif font-bold text-base">Current User Session</h2>
+        <div className="bg-white p-5 rounded-[20px] border border-gray-200 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
+            <Shield className="w-4.5 h-4.5 text-slate-700" />
+            <h2 className="font-serif font-bold text-sm text-gray-800 uppercase tracking-tight">Active User Session</h2>
           </div>
           {currentUser ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2.5 bg-[#f5f5f0]/50 dark:bg-[#151510]/50 p-2.5 rounded-xl border border-[#5A5A40]/5">
-                <div className="p-2 bg-[#5A5A40]/10 rounded-full text-[#5A5A40] dark:text-[#ecece5]">
-                  <User className="w-4 h-4" />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-gray-100">
+                <div className="p-2 bg-slate-200 text-slate-700 rounded-full">
+                  <User className="w-4.5 h-4.5" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-[#2c2c26] dark:text-[#ecece5]">{currentUser.fullName}</p>
-                  <p className="text-[10px] font-mono text-[#5A5A40]/60 dark:text-[#8a8a70]">{currentUser.id}</p>
+                  <p className="text-xs font-bold text-gray-800 uppercase">{currentUser.fullName}</p>
+                  <p className="text-[9px] font-mono text-gray-400 mt-0.5 uppercase">ID: {currentUser.id}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="bg-emerald-50 dark:bg-emerald-950/10 p-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
-                  <p className="text-[8px] font-bold text-emerald-800 uppercase">Role</p>
-                  <p className="text-xs font-bold text-emerald-900 dark:text-emerald-400">{currentUser.role}</p>
+                <div className="bg-emerald-50 p-1.5 rounded-lg border border-emerald-100">
+                  <p className="text-[8px] font-bold text-emerald-800 uppercase tracking-wider">Role</p>
+                  <p className="text-[10px] font-bold text-emerald-900 uppercase">{currentUser.role}</p>
                 </div>
-                <div className="bg-blue-50 dark:bg-blue-950/10 p-1.5 rounded-lg border border-blue-100 dark:border-blue-900/30">
-                  <p className="text-[8px] font-bold text-blue-800 uppercase">Status</p>
-                  <p className="text-xs font-bold text-blue-900 dark:text-blue-400">{currentUser.status}</p>
+                <div className="bg-blue-50 p-1.5 rounded-lg border border-blue-100">
+                  <p className="text-[8px] font-bold text-blue-800 uppercase tracking-wider">Status</p>
+                  <p className="text-[10px] font-bold text-blue-900 uppercase">{currentUser.status}</p>
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-[#5A5A40]/50 dark:text-[#8a8a70]">No user session logged in.</p>
+            <p className="text-xs text-gray-400 font-bold uppercase italic">No active user session found.</p>
           )}
         </div>
 
       </div>
 
       {/* Integration Test Runner Panel */}
-      <div className="bg-white dark:bg-[#20201a] rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#5A5A40]/10 dark:border-[#8a8a70]/20 pb-4">
+      <div className="bg-white rounded-[20px] border border-gray-200 p-5 space-y-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
           <div>
-            <h3 className="font-serif font-bold text-lg text-[#5A5A40] dark:text-[#ecece5]">System Integration Test Suite</h3>
-            <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">
+            <h3 className="font-serif font-bold text-lg text-gray-800 uppercase tracking-tight">System Integration Test Suite</h3>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
               Performs automated end-to-end regression tests matching user operations
             </p>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Test Mode Toggle */}
-            <div className="flex items-center bg-[#f5f5f0]/80 dark:bg-[#151510]/80 p-1 rounded-xl border border-[#5A5A40]/10">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-gray-200">
               <button
                 onClick={() => !isTesting && setTestMode('Demo')}
-                className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all ${
+                className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer uppercase ${
                   testMode === 'Demo' 
-                    ? 'bg-[#5A5A40] text-white shadow' 
-                    : 'text-[#2c2c26]/60 hover:text-[#2c2c26] dark:text-white/60 dark:hover:text-white'
+                    ? 'bg-slate-800 text-white shadow' 
+                    : 'text-gray-500 hover:text-gray-800'
                 }`}
                 disabled={isTesting}
               >
@@ -499,10 +496,10 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
               </button>
               <button
                 onClick={() => !isTesting && setTestMode('Live')}
-                className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all ${
+                className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer uppercase ${
                   testMode === 'Live' 
-                    ? 'bg-[#5A5A40] text-white shadow' 
-                    : 'text-[#2c2c26]/60 hover:text-[#2c2c26] dark:text-white/60 dark:hover:text-white'
+                    ? 'bg-slate-800 text-white shadow' 
+                    : 'text-gray-500 hover:text-gray-800'
                 }`}
                 disabled={isTesting || !config.webAppUrl}
               >
@@ -513,10 +510,10 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
             <button
               onClick={runAllTests}
               disabled={isTesting}
-              className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white font-bold text-xs px-5 py-2.5 rounded-full shadow transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2.5 rounded-full shadow transition-all cursor-pointer disabled:opacity-50 h-10 uppercase"
             >
-              <Play className="w-4 h-4 fill-current" />
-              {isTesting ? 'Running Tests...' : 'Run Diagnostics'}
+              <Play className="w-4.5 h-4.5 fill-current" />
+              <span>{isTesting ? 'Running Tests...' : 'Run Diagnostics'}</span>
             </button>
           </div>
         </div>
@@ -528,22 +525,22 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
               key={step.id}
               className={`flex items-start gap-3 p-3 rounded-2xl border transition-all ${
                 step.status === 'success' 
-                  ? 'bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30' 
+                  ? 'bg-emerald-50 border-emerald-100' 
                   : step.status === 'failed'
-                  ? 'bg-rose-50/50 dark:bg-rose-950/10 border-rose-100 dark:border-rose-900/30'
+                  ? 'bg-rose-50 border-rose-100'
                   : step.status === 'running'
-                  ? 'bg-[#5A5A40]/5 dark:bg-[#5A5A40]/10 border-[#5A5A40]/20 animate-pulse'
-                  : 'bg-gray-50/30 dark:bg-[#12120e]/20 border-gray-100 dark:border-gray-900/20'
+                  ? 'bg-slate-50 border-slate-300 animate-pulse'
+                  : 'bg-slate-50 border-gray-100'
               }`}
             >
               <div className="pt-0.5">
                 {step.status === 'pending' && (
-                  <div className="w-5 h-5 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-[10px] text-gray-400 font-bold">
+                  <div className="w-5 h-5 rounded-full border border-gray-200 flex items-center justify-center text-[10px] text-gray-400 font-bold">
                     {idx + 1}
                   </div>
                 )}
                 {step.status === 'running' && (
-                  <div className="w-5 h-5 rounded-full border-2 border-[#5A5A40] border-t-transparent animate-spin" />
+                  <div className="w-5 h-5 rounded-full border-2 border-slate-700 border-t-transparent animate-spin" />
                 )}
                 {step.status === 'success' && (
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -554,10 +551,10 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
               </div>
 
               <div className="space-y-0.5">
-                <p className="text-xs font-bold text-[#2c2c26] dark:text-[#ecece5]">{step.name}</p>
+                <p className="text-xs font-bold text-gray-800 uppercase">{step.name}</p>
                 {step.message && (
-                  <p className={`text-[10px] leading-relaxed ${
-                    step.status === 'failed' ? 'text-rose-700 dark:text-rose-400' : 'text-[#5A5A40]/70 dark:text-[#8a8a70]'
+                  <p className={`text-[10px] leading-relaxed uppercase font-bold ${
+                    step.status === 'failed' ? 'text-rose-600' : 'text-gray-400'
                   }`}>
                     {step.message}
                   </p>
@@ -572,57 +569,57 @@ export default function AdminDebug({ config, currentUser, onBack }: AdminDebugPr
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         
         {/* Environment Variables */}
-        <div className="bg-white dark:bg-[#20201a] p-5 rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 space-y-3">
-          <div className="flex items-center gap-2 text-[#5A5A40] dark:text-[#ecece5]">
-            <Key className="w-5 h-5" />
-            <h3 className="font-serif font-bold text-base">Environment Context</h3>
+        <div className="bg-white p-5 rounded-[20px] border border-gray-200 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
+            <Key className="w-4.5 h-4.5 text-slate-700" />
+            <h3 className="font-serif font-bold text-sm text-gray-800 uppercase tracking-tight">Environment Context</h3>
           </div>
           <div className="space-y-2">
-            <div className="bg-[#f5f5f0]/50 dark:bg-[#151510]/50 p-3 rounded-2xl border border-[#5A5A40]/5 space-y-2.5">
-              <div className="flex items-center justify-between border-b border-[#5A5A40]/5 pb-2">
-                <span className="text-[10px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase">VITE_API_URL</span>
-                <span className="text-xs font-mono text-slate-700 dark:text-slate-300">
-                  {(import.meta as any).env.VITE_API_URL || 'Not Defined'}
+            <div className="bg-slate-50 p-3 rounded-2xl border border-gray-100 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">VITE_API_URL</span>
+                <span className="text-xs font-mono font-bold text-gray-700">
+                  {(import.meta as any).env.VITE_API_URL || 'NOT DEFINED'}
                 </span>
               </div>
-              <div className="flex items-center justify-between border-b border-[#5A5A40]/5 pb-2">
-                <span className="text-[10px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase">DEV SERVER PORT</span>
-                <span className="text-xs font-mono text-slate-700 dark:text-slate-300">3000 (Compliant)</span>
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">DEV SERVER PORT</span>
+                <span className="text-xs font-mono font-bold text-gray-700">3000 (COMPLIANT)</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase">NODE_ENV</span>
-                <span className="text-xs font-mono text-slate-700 dark:text-slate-300">{(import.meta as any).env.MODE}</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">NODE_ENV</span>
+                <span className="text-xs font-mono font-bold text-gray-700 uppercase">{(import.meta as any).env.MODE}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Last API Response or Error */}
-        <div className="bg-white dark:bg-[#20201a] p-5 rounded-3xl border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 space-y-3">
-          <div className="flex items-center gap-2 text-[#5A5A40] dark:text-[#ecece5]">
-            <FileJson className="w-5 h-5" />
-            <h3 className="font-serif font-bold text-base">Last API Transaction Log</h3>
+        <div className="bg-white p-5 rounded-[20px] border border-gray-200 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
+            <FileJson className="w-4.5 h-4.5 text-slate-700" />
+            <h3 className="font-serif font-bold text-sm text-gray-800 uppercase tracking-tight">Last API Transaction Log</h3>
           </div>
           
           <div className="space-y-2.5">
             {apiError && (
-              <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40 p-3 rounded-2xl flex items-start gap-2 text-rose-800 dark:text-rose-300">
+              <div className="bg-rose-50 border border-rose-100 p-3 rounded-2xl flex items-start gap-2 text-rose-700">
                 <AlertTriangle className="w-4.5 h-4.5 shrink-0 pt-0.5" />
-                <div className="space-y-0.5 text-[11px]">
-                  <p className="font-semibold">Last Recorded Error:</p>
-                  <p className="font-mono leading-relaxed break-all">{apiError}</p>
+                <div className="space-y-0.5 text-[10px] font-bold uppercase leading-normal">
+                  <p className="text-rose-800 font-bold">Last Recorded Error:</p>
+                  <p className="font-mono tracking-wider break-all">{apiError}</p>
                 </div>
               </div>
             )}
 
             <div>
-              <p className="text-[10px] font-bold text-[#5A5A40]/50 dark:text-[#8a8a70] uppercase mb-1">Payload Output</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Payload Output</p>
               {apiResponse ? (
-                <pre className="text-[10px] font-mono leading-relaxed bg-[#f5f5f0]/60 dark:bg-[#151510]/60 p-3 rounded-2xl border border-[#5A5A40]/10 text-[#2c2c26]/80 dark:text-[#ecece5]/80 max-h-40 overflow-y-auto">
+                <pre className="text-[10px] font-mono leading-relaxed bg-slate-50 p-3 rounded-2xl border border-gray-100 text-gray-600 max-h-40 overflow-y-auto uppercase font-bold">
                   {JSON.stringify(apiResponse, null, 2)}
                 </pre>
               ) : (
-                <p className="text-xs text-[#5A5A40]/40 dark:text-[#8a8a70] italic p-3 bg-[#f5f5f0]/30 dark:bg-[#151510]/30 rounded-2xl border border-dashed border-[#5A5A40]/10">
+                <p className="text-[10px] text-gray-400 font-bold uppercase italic p-3.5 bg-slate-50 rounded-2xl border border-dashed border-gray-200 text-center">
                   No successful API requests captured in the current session.
                 </p>
               )}

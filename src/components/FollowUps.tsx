@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
-import { Customer, FollowUp } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Customer, FollowUp, Ticket } from '../types';
+import SmartGlobalSearch from './SmartGlobalSearch';
+import SmartContactActions from './SmartContactActions';
+import SearchableCustomerDropdown from './SearchableCustomerDropdown';
+import InlineCopy from './InlineCopy';
 import { 
   Calendar, 
   Clock, 
@@ -22,6 +26,7 @@ import {
 interface FollowUpsProps {
   customers: Customer[];
   followUps: FollowUp[];
+  tickets: Ticket[];
   onCreateFollowUp: (
     customerId: string,
     name: string,
@@ -40,6 +45,7 @@ type FilterTab = 'today' | 'upcoming' | 'completed';
 export default function FollowUps({
   customers,
   followUps,
+  tickets,
   onCreateFollowUp,
   onUpdateFollowUp,
   onDeleteFollowUp
@@ -57,6 +63,47 @@ export default function FollowUps({
   // Edit & Reschedule & Delete states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState('');
+  const [followupSaveStatus, setFollowupSaveStatus] = useState<'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED'>('IDLE');
+
+  // Debounced auto-save for Follow-up notes
+  useEffect(() => {
+    if (!editingId) return;
+
+    const activeFollowup = followUps.find(f => f.id === editingId);
+    if (!activeFollowup) return;
+
+    if (editNotes === activeFollowup.notes) {
+      setFollowupSaveStatus('IDLE');
+      return;
+    }
+
+    setFollowupSaveStatus('EDITING');
+    window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'EDITING' } }));
+
+    const timer = setTimeout(async () => {
+      setFollowupSaveStatus('SAVING');
+      window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVING' } }));
+      try {
+        const res = await onUpdateFollowUp(editingId, { notes: editNotes.trim() });
+        if (res.success) {
+          setFollowupSaveStatus('SAVED');
+          window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVED' } }));
+          setTimeout(() => {
+            setFollowupSaveStatus('IDLE');
+            window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'IDLE' } }));
+          }, 1500);
+        } else {
+          setFollowupSaveStatus('FAILED');
+          window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'FAILED' } }));
+        }
+      } catch (err) {
+        setFollowupSaveStatus('FAILED');
+        window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'FAILED' } }));
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [editNotes, editingId, onUpdateFollowUp]);
   
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
@@ -241,8 +288,8 @@ export default function FollowUps({
       {/* View Header with Title and Add Button */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] tracking-tight">Embassy & Candidate Follow-ups</h2>
-          <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">Schedule callbacks, embassy document reviews, and check-ins</p>
+          <h2 className="text-xl font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] tracking-tight">Follow-up Management</h2>
+          <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">Schedule callbacks, status reviews, and customer check-ins</p>
         </div>
         <button
           onClick={() => {
@@ -291,34 +338,126 @@ export default function FollowUps({
 
           <form onSubmit={handleCreate} className="space-y-4">
             
-            {/* Candidate Selector */}
-            <div>
-              <label htmlFor="followup-candidate" className="block text-xs font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70] mb-1.5">
-                Candidate <span className="text-rose-500">*</span>
+            {/* Customer Selector */}
+            <div className="space-y-3">
+              <label className="block text-xs font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70]">
+                Customer <span className="text-rose-500">*</span>
               </label>
-              {customers.length > 0 ? (
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A5A40]/45">
-                    <User className="w-4 h-4" />
+              <SearchableCustomerDropdown
+                customers={customers}
+                selectedCustomerId={selectedCustomerId}
+                onSelectCustomer={(c) => setSelectedCustomerId(c.id)}
+                placeholder="Search Customer (Name, Mobile, Customer ID)..."
+              />
+
+              {(() => {
+                const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+                if (!selectedCustomer) {
+                  return (
+                    <div className="p-3.5 bg-[#f5f5f0]/35 dark:bg-[#151510]/30 border border-dashed border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-2xl text-center text-xs text-[#5A5A40]/60 dark:text-[#8a8a70] italic">
+                      Please use the search box above to select a customer.
+                    </div>
+                  );
+                }
+
+                // Gather and combine historical tickets and follow-up activities
+                const customerTickets = tickets.filter(t => t.customerId === selectedCustomer.id);
+                const customerFollowUps = followUps.filter(f => f.customerId === selectedCustomer.id);
+
+                const timelineItems = [
+                  ...customerTickets.map(t => ({
+                    id: t.id,
+                    date: t.createdAt,
+                    type: 'ticket' as const,
+                    title: `Support Ticket (${t.status})`,
+                    content: t.conversationDescription,
+                  })),
+                  ...customerFollowUps.map(f => ({
+                    id: f.id,
+                    date: f.createdAt || f.followUpDate,
+                    type: 'followup' as const,
+                    title: `Scheduled Follow-up`,
+                    content: f.notes,
+                  }))
+                ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                return (
+                  <div className="p-4 bg-[#f5f5f0]/40 dark:bg-[#151510]/40 border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-2xl space-y-4">
+                    {/* Customer Details Header */}
+                    <div className="flex items-start justify-between gap-2 border-b border-[#5A5A40]/10 dark:border-[#8a8a70]/25 pb-3">
+                      <div>
+                        <span className="text-[10px] font-bold text-[#5A5A40]/60 uppercase tracking-wider block">Selected Customer</span>
+                        <h4 className="font-serif font-bold text-sm text-[#2c2c26] dark:text-[#ecece5] flex items-center gap-1.5 mt-0.5">
+                          <span>👤</span> {selectedCustomer.name}
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[#5A5A40]/80 dark:text-[#8a8a70]">
+                          <span className="flex items-center gap-1 font-semibold">📱 {selectedCustomer.mobileNumber}</span>
+                          {selectedCustomer.destinationCountry && (
+                            <span className="flex items-center gap-1">🌍 {selectedCustomer.destinationCountry}</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="font-mono text-[9px] bg-white dark:bg-[#1a1a15] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 px-2 py-0.5 rounded text-[#5A5A40] dark:text-[#b8b89e] font-bold">
+                        🆔 {selectedCustomer.id}
+                      </span>
+                    </div>
+
+                    {/* Timeline Area */}
+                    <div>
+                      <span className="text-[10px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase tracking-wider block mb-2">
+                        Activity & Conversation History
+                      </span>
+                      {timelineItems.length > 0 ? (
+                        <div className="space-y-3">
+                          {/* Latest Item Highlight */}
+                          <div className="p-3 bg-white dark:bg-[#20201a] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 rounded-xl text-xs space-y-1 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                              <span className={`font-bold uppercase text-[9px] px-2 py-0.5 rounded-full ${
+                                timelineItems[0].type === 'ticket' 
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400' 
+                                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400'
+                              }`}>
+                                {timelineItems[0].type === 'ticket' ? '🎫 Latest Support Ticket' : '📅 Latest Follow-up'}
+                              </span>
+                              <span className="text-[10px] font-mono text-[#5A5A40]/60 dark:text-[#8a8a70]">
+                                {new Date(timelineItems[0].date).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <p className="font-semibold text-[#2c2c26] dark:text-[#f5f5f0]">{timelineItems[0].title}</p>
+                            <p className="text-[#2c2c26]/75 dark:text-[#8a8a70] italic">"{timelineItems[0].content}"</p>
+                          </div>
+
+                          {/* Full Scrollable Conversation History */}
+                          {timelineItems.length > 1 && (
+                            <div className="border-t border-[#5A5A40]/5 dark:border-[#8a8a70]/10 pt-3">
+                              <span className="text-[10px] font-bold text-[#5A5A40]/50 dark:text-[#8a8a70]/70 uppercase tracking-wider block mb-2">
+                                Past History ({timelineItems.length} records)
+                              </span>
+                              <div className="max-h-36 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+                                {timelineItems.slice(1).map((item, index) => (
+                                  <div key={index} className="pl-3 border-l-2 border-[#5A5A40]/15 dark:border-[#8a8a70]/30 space-y-0.5 text-[11px]">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-[#5A5A40]/60 dark:text-[#8a8a70]/80 font-bold">
+                                      <span>{item.type === 'ticket' ? '🎫' : '📅'}</span>
+                                      <span>{new Date(item.date).toLocaleDateString()}</span>
+                                      <span>•</span>
+                                      <span>{item.title}</span>
+                                    </div>
+                                    <p className="text-[#2c2c26]/85 dark:text-[#ecece5]/80 italic">"{item.content}"</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-dashed border-[#5A5A40]/15 dark:border-[#8a8a70]/25 rounded-xl text-center text-[11px] text-[#5A5A40]/55 dark:text-[#8a8a70] italic">
+                          No historical activity or tickets logged yet for this customer.
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <select
-                    id="followup-candidate"
-                    className="w-full text-sm bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl pl-10 pr-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-[#5A5A40] focus:bg-white dark:focus:bg-[#1e1e18] text-[#2c2c26] dark:text-[#f5f5f0] appearance-none cursor-pointer transition-all"
-                    value={selectedCustomerId}
-                    onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  >
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.mobileNumber})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="text-xs text-amber-900 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-xl p-3">
-                  No candidates registered. Please add a candidate profile first!
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Date & Time Grid */}
@@ -448,14 +587,14 @@ export default function FollowUps({
                 <div
                   key={f.id}
                   id={`followup-card-${f.id}`}
-                  className={`bg-white dark:bg-[#20201a] p-4 rounded-2xl border transition-all ${
+                  className={`bg-white dark:bg-[#20201a] p-5 rounded-[20px] border border-[#E5E7EB] dark:border-[#8a8a70]/20 border-t-4 border-t-[#8B5CF6] transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${
                     f.status === 'Completed' 
-                      ? 'border-[#5A5A40]/10 dark:border-[#8a8a70]/10 opacity-75' 
+                      ? 'opacity-75' 
                       : overdue
-                        ? 'border-[#DC2626]/30 bg-rose-50/10 dark:bg-rose-950/5'
+                        ? 'bg-rose-50/10'
                         : f.followUpDate === todayStr 
-                          ? 'border-[#F97316]/30 bg-[#F97316]/5' 
-                          : 'border-[#5A5A40]/10 dark:border-[#8a8a70]/20'
+                          ? 'bg-[#F97316]/5' 
+                          : ''
                   }`}
                 >
                   <div className="space-y-3">
@@ -463,18 +602,27 @@ export default function FollowUps({
                     {/* Top Row: Info Header */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1">
-                        <h4 className="font-serif font-bold text-sm text-[#5A5A40] dark:text-[#ecece5]" id={`followup-name-${f.id}`}>{f.name}</h4>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <h4 className="font-serif font-bold text-sm text-[#1F2937] dark:text-[#ecece5] uppercase" id={`followup-name-${f.id}`}>{f.name}</h4>
+                          <InlineCopy type="name" value={f.name} className="min-w-[24px] min-h-[24px] p-0.5" />
+                          <span className="font-mono text-[8px] font-bold text-gray-500 bg-gray-100 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
+                            CID: {f.customerId}
+                          </span>
+                          <InlineCopy type="customerId" value={f.customerId} className="min-w-[20px] min-h-[20px] p-0" />
+                        </div>
                         <div className="flex items-center gap-2 text-xs text-[#5A5A40]/75 dark:text-[#8a8a70]">
                           <span className="flex items-center gap-1">
                             <Phone className="w-3.5 h-3.5 text-[#5A5A40]/40" />
                             <a href={`tel:${f.mobileNumber}`} className="hover:underline text-[#5A5A40] dark:text-[#b8b89e] font-semibold">{f.mobileNumber}</a>
+                            <InlineCopy type="mobile" value={f.mobileNumber} className="min-w-[24px] min-h-[24px] p-0.5" />
                           </span>
                         </div>
                       </div>
 
                       <div className="flex flex-col items-end gap-1.5 text-right font-mono text-[10px]">
-                        <span className="font-bold text-[#5A5A40] dark:text-[#ecece5] bg-[#f5f5f0] dark:bg-[#151510] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 px-1.5 py-0.5 rounded-md shrink-0">
+                        <span className="inline-flex items-center gap-1 font-bold text-[#5A5A40] dark:text-[#ecece5] bg-[#f5f5f0] dark:bg-[#151510] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 px-1.5 py-0.5 rounded-md shrink-0">
                           {f.id}
+                          <InlineCopy type="ticketId" value={f.id} className="min-w-[20px] min-h-[20px] p-0" />
                         </span>
                         
                         {/* Date and Time values with exact colors */}
@@ -489,24 +637,28 @@ export default function FollowUps({
                     <div className="bg-[#f5f5f0]/45 dark:bg-[#151510]/40 p-3 rounded-xl border border-[#5A5A40]/5 dark:border-[#8a8a70]/10">
                       {isEditing ? (
                         <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-[#5A5A40]/60 uppercase">EDIT FOLLOW-UP NOTES</span>
+                            <span className="text-[9px] font-bold uppercase tracking-wider">
+                              {followupSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
+                              {followupSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
+                              {followupSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
+                              {followupSaveStatus === 'FAILED' && <span className="text-red-500 animate-bounce">❌ SAVE FAILED</span>}
+                            </span>
+                          </div>
                           <textarea
-                            className="w-full text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-[#5A5A40] text-[#2c2c26] dark:text-[#f5f5f0]"
+                            className="w-full text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-primary-olive text-[#2c2c26] dark:text-[#f5f5f0] font-sans"
                             rows={3}
                             value={editNotes}
                             onChange={(e) => setEditNotes(e.target.value)}
+                            placeholder="Type follow-up or reminder notes here. Autosaves as you type..."
                           />
                           <div className="flex items-center gap-2 justify-end">
                             <button
                               onClick={() => setEditingId(null)}
-                              className="px-2.5 py-1 text-[10px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md hover:bg-black/5"
+                              className="px-4 py-1.5 text-[10px] font-bold bg-[#5A5A40] text-white rounded-md cursor-pointer uppercase"
                             >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleSaveNotes(f.id)}
-                              className="px-3 py-1 text-[10px] font-bold bg-[#5A5A40] text-white rounded-md hover:bg-[#4a4a34]"
-                            >
-                              Save Notes
+                              Done Editing
                             </button>
                           </div>
                         </div>
@@ -516,6 +668,22 @@ export default function FollowUps({
                         </p>
                       )}
                     </div>
+
+                    {(() => {
+                      const customer = customers.find(c => c.id === f.customerId);
+                      if (!customer) return null;
+                      return (
+                        <div className="pt-1.5 flex justify-end">
+                          <SmartContactActions
+                            customerName={customer.name}
+                            mobileNumber={customer.mobileNumber}
+                            whatsAppNumber={customer.whatsAppNumber}
+                            imoNumber={customer.imoNumber}
+                            customerId={customer.id}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     {/* Rescheduling Form Inline */}
                     {isRescheduling && (
@@ -577,78 +745,33 @@ export default function FollowUps({
                     )}
 
                     {/* Footer row of card: Action buttons */}
-                    {!isConfirmDeleting && (
-                      <div className="flex items-center justify-between pt-2.5 border-t border-[#f5f5f0] dark:border-[#151510]">
-                        <span className="text-[9px] text-[#5A5A40]/55 dark:text-[#8a8a70] uppercase font-bold tracking-wider">
-                          Created: {new Date(f.createdAt || '').toLocaleDateString()}
-                        </span>
+                    <div className="flex items-center justify-between pt-2.5 border-t border-[#f5f5f0] dark:border-[#151510]">
+                      <span className="text-[9px] text-[#5A5A40]/55 dark:text-[#8a8a70] uppercase font-bold tracking-wider">
+                        Created: {new Date(f.createdAt || '').toLocaleDateString()}
+                      </span>
+                      
+                      <div className="flex items-center gap-2">
                         
-                        <div className="flex items-center gap-2">
-                          
-                          {/* Complete action */}
-                          {f.status === 'Pending' && (
-                            <button
-                              onClick={() => handleMarkComplete(f)}
-                              title="Mark Completed"
-                              id={`btn-complete-followup-${f.id}`}
-                              className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-[#5A5A40] dark:text-[#ecece5] hover:text-emerald-700 dark:hover:text-emerald-400 border border-[#5A5A40]/10 dark:border-[#8a8a70]/30 rounded-lg active:scale-95 transition-all cursor-pointer"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* Edit Notes action */}
-                          {!isEditing && (
-                            <button
-                              onClick={() => {
-                                setEditingId(f.id);
-                                setEditNotes(f.notes);
-                                setReschedulingId(null);
-                                setDeletingId(null);
-                              }}
-                              title="Edit Notes"
-                              id={`btn-edit-notes-${f.id}`}
-                              className="p-1.5 hover:bg-amber-50 dark:hover:bg-amber-950/20 text-[#5A5A40] dark:text-[#ecece5] hover:text-amber-700 dark:hover:text-amber-400 border border-[#5A5A40]/10 dark:border-[#8a8a70]/30 rounded-lg active:scale-95 transition-all cursor-pointer"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* Reschedule action */}
-                          {f.status === 'Pending' && !isRescheduling && (
-                            <button
-                              onClick={() => {
-                                setReschedulingId(f.id);
-                                setRescheduleDate(f.followUpDate);
-                                setRescheduleTime(f.followUpTime);
-                                setEditingId(null);
-                                setDeletingId(null);
-                              }}
-                              title="Reschedule Reminder"
-                              id={`btn-reschedule-${f.id}`}
-                              className="p-1.5 hover:bg-sky-50 dark:hover:bg-sky-950/20 text-[#5A5A40] dark:text-[#ecece5] hover:text-sky-700 dark:hover:text-sky-400 border border-[#5A5A40]/10 dark:border-[#8a8a70]/30 rounded-lg active:scale-95 transition-all cursor-pointer"
-                            >
-                              <Clock className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* Delete action */}
+                        {/* Complete action */}
+                        {f.status === 'Pending' && (
                           <button
-                            onClick={() => {
-                              setDeletingId(f.id);
-                              setEditingId(null);
-                              setReschedulingId(null);
-                            }}
-                            title="Delete Reminder"
-                            id={`btn-delete-followup-${f.id}`}
-                            className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-[#5A5A40] dark:text-[#ecece5] hover:text-rose-700 dark:hover:text-rose-400 border border-[#5A5A40]/10 dark:border-[#8a8a70]/30 rounded-lg active:scale-95 transition-all cursor-pointer"
+                            onClick={() => handleMarkComplete(f)}
+                            title="Mark Completed"
+                            id={`btn-complete-followup-${f.id}`}
+                            className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-[#5A5A40] dark:text-[#ecece5] hover:text-emerald-700 dark:hover:text-emerald-400 border border-[#5A5A40]/10 dark:border-[#8a8a70]/30 rounded-lg active:scale-95 transition-all cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Check className="w-3.5 h-3.5" />
                           </button>
+                        )}
 
-                        </div>
+                        {f.status === 'Completed' && (
+                          <span className="text-[10px] text-emerald-600 font-semibold italic flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/10 px-2 py-0.5 rounded-md">
+                            ✓ Completed
+                          </span>
+                        )}
+
                       </div>
-                    )}
+                    </div>
 
                   </div>
                 </div>

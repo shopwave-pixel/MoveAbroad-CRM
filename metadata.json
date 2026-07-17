@@ -1,6 +1,6 @@
 {
-  "name": "MoveAbroad CRM",
-  "description": "Simple, fast, and mobile-friendly CRM for an overseas recruitment and visa agency, powered by Google Sheets.",
+  "name": "MoveAboard CRM",
+  "description": "Enterprise-grade, lightweight, and mobile-friendly CRM powered by Google Sheets and Google Apps Script.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

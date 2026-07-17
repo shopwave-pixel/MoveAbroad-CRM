@@ -3,13 +3,14 @@ export interface Customer {
   name: string;
   mobileNumber: string;
   whatsAppNumber?: string;
+  imoNumber?: string;
   destinationCountry?: string;
   source?: string; // Facebook, Walk-in, Reference, Website, Other
   remarks?: string;
   createdAt: string;
 }
 
-export type TicketStatus = 'Open' | 'Pending' | 'Closed';
+export type TicketStatus = 'Open' | 'Closed';
 
 export interface Ticket {
   id: string; // e.g., TKT-000001
