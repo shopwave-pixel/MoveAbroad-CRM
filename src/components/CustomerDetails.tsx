@@ -648,29 +648,31 @@ const CustomerDetails = React.memo(function CustomerDetails({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center h-5 mb-0.5">
                   <label htmlFor="edit-mobile-input" className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Mobile Number</label>
-                  <button
-                    type="button"
-                    onClick={handleAddEditAdditionalNumberRow}
-                    className="w-5.5 h-5.5 rounded-full bg-accent-green hover:bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition-all shadow-xs shrink-0 cursor-pointer"
-                    title="Add Additional Mobile Number"
-                  >
-                    <Plus className="w-3 h-3 text-white" />
-                  </button>
                 </div>
                 
                 <div className="space-y-2">
-                  <input
-                    type="tel"
-                    id="edit-mobile-input"
-                    required
-                    className="w-full text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all font-medium text-[#1F2937]"
-                    value={editMobile}
-                    onChange={(e) => {
-                      setEditMobile(e.target.value);
-                      if (isSameAsMobile) setEditWhatsApp(e.target.value);
-                      if (isImoSameAsMobile) setEditImo(e.target.value);
-                    }}
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="tel"
+                      id="edit-mobile-input"
+                      required
+                      className="flex-1 text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all font-medium text-[#1F2937]"
+                      value={editMobile}
+                      onChange={(e) => {
+                        setEditMobile(e.target.value);
+                        if (isSameAsMobile) setEditWhatsApp(e.target.value);
+                        if (isImoSameAsMobile) setEditImo(e.target.value);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddEditAdditionalNumberRow}
+                      className="w-[42px] h-[42px] rounded-xl bg-accent-green hover:bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition-all shadow-xs shrink-0 cursor-pointer"
+                      title="Add Additional Mobile Number"
+                    >
+                      <Plus className="w-5 h-5 text-white" />
+                    </button>
+                  </div>
 
                   {editAdditionalNumbers.map((field) => (
                     <div key={field.id} className="flex items-center gap-2">
@@ -691,10 +693,10 @@ const CustomerDetails = React.memo(function CustomerDetails({
                       <button
                         type="button"
                         onClick={() => handleRemoveEditAdditionalNumberRow(field.id)}
-                        className="p-1.5 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg active:scale-95 transition-all shrink-0 cursor-pointer"
+                        className="w-[42px] h-[42px] flex items-center justify-center text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl active:scale-95 transition-all shrink-0 cursor-pointer border border-transparent hover:border-rose-100"
                         title="Remove this number"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-5 h-5" />
                       </button>
                     </div>
                   ))}

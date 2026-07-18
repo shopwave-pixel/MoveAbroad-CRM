@@ -63,7 +63,7 @@ h1, h2, h3, h4, h5, h6, th, .badge, [data-badge] {
 
 button, .button, [role="button"] {
   font-weight: 500 !important;
-  min-height: 44px; /* Touch target minimum height */
+  min-height: 38px; /* Compact touch-friendly button height */
 }
 
 /* ============================================================================
@@ -72,51 +72,51 @@ button, .button, [role="button"] {
 
 :root {
   /* Logo */
-  --font-size-logo: 18px;
+  --font-size-logo: 16px;
   
   /* Page Title (Responsive Scale) */
-  --font-size-page-title: 22px; /* Default/Mobile */
+  --font-size-page-title: 20px; /* Default/Mobile */
   
   /* Section Title */
-  --font-size-section-title: 20px;
+  --font-size-section-title: 18px;
   
   /* Card Title */
   --font-size-card-title: 15px;
   
   /* Body Text */
-  --font-size-body-text: 16px;
+  --font-size-body-text: 14px;
   
   /* Button Text */
-  --font-size-button-text: 14px;
+  --font-size-button-text: 13.5px;
   
   /* Input Label */
-  --font-size-input-label: 14px;
+  --font-size-input-label: 13.5px;
   
   /* Input Placeholder */
-  --font-size-input-placeholder: 15px;
+  --font-size-input-placeholder: 13.5px;
   
   /* Small Label */
-  --font-size-small-label: 13px;
+  --font-size-small-label: 12px;
   
   /* Caption */
-  --font-size-caption: 12px;
+  --font-size-caption: 11px;
   
   /* Badge Text */
-  --font-size-badge-text: 12px;
+  --font-size-badge-text: 11.5px;
   
   /* Statistics Number */
-  --font-size-statistics-number: 32px;
+  --font-size-statistics-number: 26px;
   
   /* Card Number */
-  --font-size-card-number: 30px;
+  --font-size-card-number: 24px;
   
   /* Bottom Navigation Label */
-  --font-size-bottom-navigation-label: 13px;
+  --font-size-bottom-navigation-label: 11px;
   
   /* Dropdown, Table Header & Table Content */
-  --font-size-dropdown: 14px;
-  --font-size-table-header: 14px;
-  --font-size-table-content: 14px;
+  --font-size-dropdown: 13.5px;
+  --font-size-table-header: 13.5px;
+  --font-size-table-content: 13.5px;
 }
 
 /* AUTOMATIC ENTERPRISE RESPONSIVE SCALING BASED ON SCREEN WIDTH */
@@ -124,54 +124,62 @@ button, .button, [role="button"] {
 /* Mobile Proportions (320px, 360px, 375px, 390px, 412px, 430px) */
 @media (min-width: 320px) {
   :root {
-    --font-size-page-title: 22px;
-    --font-size-badge-text: 12px;
+    --font-size-page-title: 20px;
+    --font-size-badge-text: 11.5px;
+    --font-size-statistics-number: 24px;
   }
 }
 @media (min-width: 360px) {
   :root {
-    --font-size-page-title: 22px;
-    --font-size-badge-text: 12px;
+    --font-size-page-title: 20px;
+    --font-size-badge-text: 11.5px;
+    --font-size-statistics-number: 24px;
   }
 }
 @media (min-width: 375px) {
   :root {
-    --font-size-page-title: 22px;
-    --font-size-badge-text: 12px;
+    --font-size-page-title: 20px;
+    --font-size-badge-text: 11.5px;
+    --font-size-statistics-number: 24px;
   }
 }
 @media (min-width: 390px) {
   :root {
-    --font-size-page-title: 22px;
-    --font-size-badge-text: 12px;
+    --font-size-page-title: 20px;
+    --font-size-badge-text: 11.5px;
+    --font-size-statistics-number: 25px;
   }
 }
 @media (min-width: 412px) {
   :root {
-    --font-size-page-title: 22px;
-    --font-size-badge-text: 12.5px;
+    --font-size-page-title: 21px;
+    --font-size-badge-text: 11.5px;
+    --font-size-statistics-number: 25px;
   }
 }
 @media (min-width: 430px) {
   :root {
-    --font-size-page-title: 23px;
-    --font-size-badge-text: 12.5px;
+    --font-size-page-title: 21px;
+    --font-size-badge-text: 11.5px;
+    --font-size-statistics-number: 26px;
   }
 }
 
 /* Tablet Proportions (768px) */
 @media (min-width: 768px) {
   :root {
-    --font-size-page-title: 24px;
-    --font-size-badge-text: 13px;
+    --font-size-page-title: 22px;
+    --font-size-badge-text: 12px;
+    --font-size-statistics-number: 28px;
   }
 }
 
 /* Desktop Proportions (1024px, 1440px) */
 @media (min-width: 1024px) {
   :root {
-    --font-size-page-title: 28px;
-    --font-size-badge-text: 13px;
+    --font-size-page-title: 22px;
+    --font-size-badge-text: 12px;
+    --font-size-statistics-number: 28px;
   }
 }
 
@@ -367,11 +375,11 @@ td {
   font-weight: 500 !important;
 }
 
-/* Ensure inputs, selects and textareas have a comfortable touch area */
+/* Ensure inputs, selects and textareas have a compact but accessible touch area */
 input, select, textarea {
-  min-height: 44px !important;
-  padding-top: 10px !important;
-  padding-bottom: 10px !important;
+  min-height: 38px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
 }
 
 
@@ -468,11 +476,11 @@ header.sticky {
 /* Ensure the layout has safe area padding and never hides behind sticky elements */
 body {
   padding-top: env(safe-area-inset-top, 0px) !important;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px) !important; /* Bottom bar padding */
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px) !important; /* Bottom bar padding reduced from 96px to 72px */
 }
 
 main {
-  margin-top: 12px !important;
+  margin-top: 8px !important;
 }
 
 
@@ -491,7 +499,7 @@ table {
 }
 
 th, td {
-  padding: 14px 18px !important; /* Improved column spacing */
+  padding: 10px 14px !important; /* Reduced from 14px 18px for tighter data density */
   white-space: nowrap !important;
 }
 
@@ -499,14 +507,14 @@ tr {
   background-color: var(--color-crm-card) !important;
 }
 
-/* Card spacing improvement */
+/* Card spacing improvement conforming to 8px/12px/16px scale */
 .card, [class*="Card"] {
-  gap: 1.5rem !important;
+  gap: 12px !important;
 }
 
 /* Form group rows spacing */
 form .space-y-4 > * + * {
-  margin-top: 1.5rem !important;
+  margin-top: 12px !important;
 }
 
 

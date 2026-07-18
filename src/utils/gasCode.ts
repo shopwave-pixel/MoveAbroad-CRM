@@ -698,71 +698,112 @@ function doPost(e) {
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
+  const requiredUsersHeaders = [
+    "User ID", 
+    "Full Name", 
+    "Login ID", 
+    "Password", 
+    "Role", 
+    "Status", 
+    "Created At"
+  ];
+
+  const requiredCustomerHeaders = [
+    "Customer ID", 
+    "Full Name", 
+    "Mobile Number", 
+    "WhatsApp Number", 
+    "Destination Country", 
+    "Source", 
+    "Remarks", 
+    "Created At",
+    "Customer Category",
+    "Address",
+    "Gender"
+  ];
+
+  const requiredTicketsHeaders = [
+    "Ticket ID", 
+    "Customer ID", 
+    "Customer Name", 
+    "Mobile Number", 
+    "Conversation Description", 
+    "Status", 
+    "Created At"
+  ];
+
+  const requiredFollowUpsHeaders = [
+    "Follow-up ID", 
+    "Customer ID", 
+    "Customer Name", 
+    "Mobile Number", 
+    "Follow-up Date", 
+    "Follow-up Time", 
+    "Notes", 
+    "Status", 
+    "Created At"
+  ];
+
+  function ensureSheetHeaders(sheet, requiredHeaders) {
+    const lastColumn = sheet.getLastColumn();
+    let existingHeaders = [];
+    if (lastColumn > 0) {
+      existingHeaders = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(function(h) {
+        return String(h).trim();
+      });
+    }
+    
+    const headersToAppend = [];
+    for (let i = 0; i < requiredHeaders.length; i++) {
+      const reqHeader = requiredHeaders[i];
+      if (existingHeaders.indexOf(reqHeader) === -1) {
+        headersToAppend.push(reqHeader);
+      }
+    }
+    
+    if (headersToAppend.length > 0) {
+      const startCol = lastColumn + 1;
+      const range = sheet.getRange(1, startCol, 1, headersToAppend.length);
+      range.setValues([headersToAppend]);
+      // Set bold style for newly added headers
+      sheet.getRange(1, 1, 1, startCol + headersToAppend.length - 1).setFontWeight("bold");
+    }
+  }
+
   let usersSheet = ss.getSheetByName("Users");
   if (!usersSheet) {
     usersSheet = ss.insertSheet("Users");
-    // Append Headers: User ID, Full Name, Login ID, Password, Role, Status, Created At
-    usersSheet.appendRow([
-      "User ID", 
-      "Full Name", 
-      "Login ID", 
-      "Password", 
-      "Role", 
-      "Status", 
-      "Created At"
-    ]);
-    usersSheet.getRange("A1:G1").setFontWeight("bold");
+    usersSheet.appendRow(requiredUsersHeaders);
+    usersSheet.getRange(1, 1, 1, requiredUsersHeaders.length).setFontWeight("bold");
+  } else {
+    ensureSheetHeaders(usersSheet, requiredUsersHeaders);
   }
 
   let customersSheet = ss.getSheetByName("Customers");
   if (!customersSheet) {
     customersSheet = ss.insertSheet("Customers");
-    customersSheet.appendRow([
-      "Customer ID", 
-      "Full Name", 
-      "Mobile Number", 
-      "WhatsApp Number", 
-      "Destination Country", 
-      "Source", 
-      "Remarks", 
-      "Created At",
-      "Customer Category",
-      "Address",
-      "Gender"
-    ]);
-    customersSheet.getRange("A1:K1").setFontWeight("bold");
+    customersSheet.appendRow(requiredCustomerHeaders);
+    customersSheet.getRange(1, 1, 1, requiredCustomerHeaders.length).setFontWeight("bold");
+  } else {
+    ensureSheetHeaders(customersSheet, requiredCustomerHeaders);
   }
   
   let ticketsSheet = ss.getSheetByName("Tickets");
   if (!ticketsSheet) {
     ticketsSheet = ss.insertSheet("Tickets");
-    ticketsSheet.appendRow([
-      "Ticket ID", 
-      "Customer ID", 
-      "Customer Name", 
-      "Mobile Number", 
-      "Conversation Description", 
-      "Status", 
-      "Created At"
-    ]);
-    ticketsSheet.getRange("A1:G1").setFontWeight("bold");
+    ticketsSheet.appendRow(requiredTicketsHeaders);
+    ticketsSheet.getRange(1, 1, 1, requiredTicketsHeaders.length).setFontWeight("bold");
+  } else {
+    ensureSheetHeaders(ticketsSheet, requiredTicketsHeaders);
   }
 
   let followUpsSheet = ss.getSheetByName("FollowUps");
   if (!followUpsSheet) {
     followUpsSheet = ss.insertSheet("FollowUps");
-    followUpsSheet.appendRow([
-      "Follow-up ID", 
-      "Customer ID", 
-      "Customer Name", 
-      "Mobile Number", 
-      "Follow-up Date", 
-      "Follow-up Time", 
-      "Notes", 
-      "Status", 
-      "Created At"
-    ]);
-    followUpsSheet.getRange("A1:I1").setFontWeight("bold");
+    followUpsSheet.appendRow(requiredFollowUpsHeaders);
+    followUpsSheet.getRange(1, 1, 1, requiredFollowUpsHeaders.length).setFontWeight("bold");
+  } else {
+    ensureSheetHeaders(followUpsSheet, requiredFollowUpsHeaders);
   }
   
   return {
@@ -773,78 +814,108 @@ function setupSheets() {
   };
 }
 
-// Fetch all users as JSON objects
+// Fetch all users as JSON objects using dynamic header mapping
 function getUsers(sheet) {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
   
+  const headers = data[0].map(h => String(h).trim());
   const rows = data.slice(1);
-  return rows.map(row => ({
-    id: String(row[0]),
-    fullName: String(row[1]),
-    loginId: String(row[2]),
-    passwordHash: String(row[3]),
-    role: String(row[4]),
-    status: String(row[5]),
-    createdAt: String(row[6])
-  }));
+  return rows.map(row => {
+    const getVal = (colName, defaultVal = '') => {
+      const idx = headers.indexOf(colName);
+      return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
+    };
+    return {
+      id: getVal("User ID"),
+      fullName: getVal("Full Name"),
+      loginId: getVal("Login ID"),
+      passwordHash: getVal("Password"),
+      role: getVal("Role"),
+      status: getVal("Status"),
+      createdAt: getVal("Created At")
+    };
+  });
 }
 
-// Fetch all customers as JSON objects
+// Fetch all customers as JSON objects using dynamic header mapping
 function getCustomers(sheet) {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
   
+  const headers = data[0].map(h => String(h).trim());
   const rows = data.slice(1);
-  return rows.map(row => ({
-    id: String(row[0]),
-    name: String(row[1]),
-    mobileNumber: String(row[2]),
-    whatsAppNumber: String(row[3] || ''),
-    destinationCountry: String(row[4] || ''),
-    source: String(row[5] || 'Other'),
-    remarks: String(row[6] || ''),
-    createdAt: String(row[7]),
-    customerCategory: String(row[8] || ''),
-    address: String(row[9] || ''),
-    gender: String(row[10] || '')
-  }));
+  
+  return rows.map(row => {
+    const getVal = (colName, defaultVal = '') => {
+      const idx = headers.indexOf(colName);
+      return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
+    };
+    
+    return {
+      id: getVal("Customer ID"),
+      name: getVal("Full Name"),
+      mobileNumber: getVal("Mobile Number"),
+      whatsAppNumber: getVal("WhatsApp Number"),
+      destinationCountry: getVal("Destination Country"),
+      source: getVal("Source", "Other"),
+      remarks: getVal("Remarks"),
+      createdAt: getVal("Created At"),
+      customerCategory: getVal("Customer Category"),
+      address: getVal("Address"),
+      gender: getVal("Gender")
+    };
+  });
 }
 
-// Fetch all tickets as JSON objects
+// Fetch all tickets as JSON objects using dynamic header mapping
 function getTickets(sheet) {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
   
+  const headers = data[0].map(h => String(h).trim());
   const rows = data.slice(1);
-  return rows.map(row => ({
-    id: String(row[0]),
-    customerId: String(row[1]),
-    name: String(row[2]),
-    mobileNumber: String(row[3]),
-    conversationDescription: String(row[4]),
-    status: String(row[5]),
-    createdAt: String(row[6])
-  }));
+  return rows.map(row => {
+    const getVal = (colName, defaultVal = '') => {
+      const idx = headers.indexOf(colName);
+      return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
+    };
+    return {
+      id: getVal("Ticket ID"),
+      customerId: getVal("Customer ID"),
+      name: getVal("Customer Name"),
+      mobileNumber: getVal("Mobile Number"),
+      conversationDescription: getVal("Conversation Description"),
+      status: getVal("Status"),
+      createdAt: getVal("Created At")
+    };
+  });
 }
 
-// Fetch all followups as JSON objects
+// Fetch all followups as JSON objects using dynamic header mapping
 function getFollowUps(sheet) {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
   
+  const headers = data[0].map(h => String(h).trim());
   const rows = data.slice(1);
-  return rows.map(row => ({
-    id: String(row[0]),
-    customerId: String(row[1]),
-    name: String(row[2]),
-    mobileNumber: String(row[3]),
-    followUpDate: String(row[4]),
-    followUpTime: String(row[5]),
-    notes: String(row[6]),
-    status: String(row[7]),
-    createdAt: String(row[8])
-  }));
+  return rows.map(row => {
+    const getVal = (colName, defaultVal = '') => {
+      const idx = headers.indexOf(colName);
+      return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
+    };
+    return {
+      id: getVal("Follow-up ID"),
+      customerId: getVal("Customer ID"),
+      name: getVal("Customer Name"),
+      mobileNumber: getVal("Mobile Number"),
+      followUpDate: getVal("Follow-up Date"),
+      followUpTime: getVal("Follow-up Time"),
+      notes: getVal("Notes"),
+      status: getVal("Status"),
+      createdAt: getVal("Created At")
+    };
+  });
 }
 
 // Generic row deletion helper

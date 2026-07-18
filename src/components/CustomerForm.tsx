@@ -389,39 +389,41 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
               <label htmlFor="customer-mobile" className="block text-sm font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
                 Mobile Number <span className="text-rose-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={handleAddAdditionalNumberField}
-                className="w-5.5 h-5.5 rounded-full bg-accent-green hover:bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition-all shadow-xs shrink-0 cursor-pointer"
-                title="Add Additional Mobile Number"
-              >
-                <Plus className="w-3.5 h-3.5 text-white" />
-              </button>
             </div>
             
             <div className="space-y-2">
-              <div className={`flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border ${mobileError ? 'border-rose-400 focus-within:ring-rose-400/20' : 'border-gray-200 dark:border-[#8a8a70]/30 focus-within:ring-accent-blue/20 focus-within:border-accent-blue'} overflow-hidden focus-within:ring-2 transition-all`}>
-                <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-[13px] font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
-                  +880
+              <div className="flex items-center gap-2">
+                <div className={`flex-1 flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border ${mobileError ? 'border-rose-400 focus-within:ring-rose-400/20' : 'border-gray-200 dark:border-[#8a8a70]/30 focus-within:ring-accent-blue/20 focus-within:border-accent-blue'} overflow-hidden focus-within:ring-2 transition-all`}>
+                  <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-[13px] font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
+                    +880
+                  </div>
+                  <input
+                    type="tel"
+                    id="customer-mobile"
+                    name="customer-mobile"
+                    required
+                    tabIndex={2}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
+                    className="w-full text-[13px] bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
+                    placeholder="17XXXXXXXX"
+                    value={mobileNumberSuffix}
+                    onChange={(e) => {
+                      setMobileNumberSuffix(e.target.value);
+                      setMobileError('');
+                      if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
+                    }}
+                    disabled={status.type === 'loading'}
+                  />
                 </div>
-                <input
-                  type="tel"
-                  id="customer-mobile"
-                  name="customer-mobile"
-                  required
-                  tabIndex={2}
-                  pattern="[0-9]*"
-                  inputMode="numeric"
-                  className="w-full text-[13px] bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
-                  placeholder="17XXXXXXXX"
-                  value={mobileNumberSuffix}
-                  onChange={(e) => {
-                    setMobileNumberSuffix(e.target.value);
-                    setMobileError('');
-                    if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
-                  }}
-                  disabled={status.type === 'loading'}
-                />
+                <button
+                  type="button"
+                  onClick={handleAddAdditionalNumberField}
+                  className="w-[42px] h-[42px] rounded-xl bg-accent-green hover:bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition-all shadow-xs shrink-0 cursor-pointer"
+                  title="Add Additional Mobile Number"
+                >
+                  <Plus className="w-5 h-5 text-white" />
+                </button>
               </div>
 
               {additionalNumbers.map((field) => (
@@ -444,10 +446,10 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                   <button
                     type="button"
                     onClick={() => handleRemoveAdditionalNumberField(field.id)}
-                    className="p-1.5 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg active:scale-95 transition-all shrink-0 cursor-pointer"
+                    className="w-[42px] h-[42px] flex items-center justify-center text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl active:scale-95 transition-all shrink-0 cursor-pointer border border-transparent hover:border-rose-100"
                     title="Remove this number"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
               ))}
