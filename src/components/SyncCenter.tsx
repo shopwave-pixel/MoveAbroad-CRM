@@ -10,6 +10,7 @@ import {
   resolveConflict, 
   triggerAutoSync, 
   subscribeToConflicts,
+  retryQueueItem,
   SyncConflict 
 } from '../utils/cacheManager';
 
@@ -22,6 +23,8 @@ interface SyncCenterProps {
   lastSyncTime: Date | null;
   syncHistory: { timestamp: string; action: string; details: string; status: 'SUCCESS' | 'FAILED' }[];
   config: SyncConfig;
+  isDeveloperMode?: boolean;
+  onOpenLogs?: () => void;
 }
 
 export default function SyncCenter({
@@ -32,10 +35,15 @@ export default function SyncCenter({
   syncStatus,
   lastSyncTime,
   syncHistory,
-  config
+  config,
+  isDeveloperMode = false,
+  onOpenLogs
 }: SyncCenterProps) {
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [activeCompareId, setActiveCompareId] = useState<string | null>(null);
+  const [expandedDebugItemId, setExpandedDebugItemId] = useState<string | null>(null);
+  const [isRetryingItem, setIsRetryingItem] = useState<string | null>(null);
+  const [copiedTextType, setCopiedTextType] = useState<{ id: string; type: string } | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToConflicts((currentConflicts) => {
@@ -43,6 +51,32 @@ export default function SyncCenter({
     });
     return unsubscribe;
   }, []);
+
+  const handleCopy = async (id: string, text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedTextType({ id, type });
+      setTimeout(() => setCopiedTextType(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
+  };
+
+  const handleRetryItem = async (itemId: string) => {
+    setIsRetryingItem(itemId);
+    try {
+      const res = await retryQueueItem(itemId);
+      if (res.success) {
+        window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '✅ Sync retry successful!' } }));
+      } else {
+        window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `❌ Retry failed: ${res.error || 'Server Returned Failure'}` } }));
+      }
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `❌ Error retrying: ${err.message || err}` } }));
+    } finally {
+      setIsRetryingItem(null);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -283,7 +317,139 @@ export default function SyncCenter({
                         <span className="font-mono text-slate-400 dark:text-[#8a8a70]">{formatTime(item.timestamp)}</span>
                       </div>
 
-                      {item.errorMessage && (
+                      {item.syncStatus === 'failed' && (
+                        <div className="mt-2 space-y-2">
+                          {/* Main Error Alert */}
+                          <div className="text-[13px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/10 p-2 rounded-lg border border-rose-100/50 dark:border-rose-900/20 leading-tight flex items-start justify-between gap-1.5">
+                            <span className="break-all">Error: {item.backendErrorMessage || item.errorMessage || 'Unknown sync error'}</span>
+                            <button
+                              onClick={() => setExpandedDebugItemId(expandedDebugItemId === item.id ? null : item.id)}
+                              className="text-[11px] font-bold text-rose-700 hover:text-rose-950 dark:text-rose-300 dark:hover:text-rose-100 hover:underline cursor-pointer select-none shrink-0"
+                            >
+                              {expandedDebugItemId === item.id ? 'Hide Details' : 'Inspect Failure'}
+                            </button>
+                          </div>
+
+                          {/* Expanded Developer Diagnostics Panel */}
+                          {expandedDebugItemId === item.id && (
+                            <div className="bg-[#1e1e1e] dark:bg-black text-slate-300 rounded-xl p-3.5 border border-slate-700/50 shadow-inner font-mono text-[11px] space-y-3 mt-2 overflow-x-auto select-text">
+                              <div className="flex items-center justify-between border-b border-slate-700/60 pb-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                                <span>Developer Diagnostics</span>
+                                {isDeveloperMode && (
+                                  <span className="text-amber-500 font-extrabold uppercase">Admin Mode</span>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10.5px]">
+                                <div>
+                                  <span className="text-slate-500 font-bold uppercase">HTTP Status:</span>{' '}
+                                  <span className={`font-bold ${item.httpStatus === 200 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {item.httpStatus ?? '—'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 font-bold uppercase">Action:</span>{' '}
+                                  <span className="text-amber-400 font-bold">{item.requestAction || item.action}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 font-bold uppercase">Customer ID:</span>{' '}
+                                  <span className="text-blue-400 font-bold">{item.customerId || '—'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 font-bold uppercase">Exec Time:</span>{' '}
+                                  <span className="text-teal-400 font-bold">{item.executionTime ? `${item.executionTime}ms` : '—'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 font-bold uppercase">Retry Count:</span>{' '}
+                                  <span className="text-purple-400 font-bold">{item.retryCount ?? '0'}/3</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 font-bold uppercase">Timestamp:</span>{' '}
+                                  <span className="text-slate-400">{formatTime(item.timestamp)}</span>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <span className="text-slate-500 text-[10px] font-bold uppercase block">Backend Error Message:</span>
+                                <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800 text-rose-300 break-all select-all font-bold">
+                                  {item.backendErrorMessage || item.errorMessage || 'No specific backend error reported.'}
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500 text-[10px] font-bold uppercase">Request Payload:</span>
+                                  <button
+                                    onClick={() => handleCopy(item.id, item.requestPayload || JSON.stringify(item.payload), 'payload')}
+                                    className="text-[10px] text-blue-400 hover:underline cursor-pointer"
+                                  >
+                                    {copiedTextType?.id === item.id && copiedTextType?.type === 'payload' ? 'Copied!' : 'Copy Payload'}
+                                  </button>
+                                </div>
+                                <pre className="bg-slate-900/60 p-2 rounded-lg border border-slate-800 text-slate-300 overflow-x-auto max-h-24 select-all text-[10px] font-bold leading-normal">
+                                  {item.requestPayload || JSON.stringify(item.payload, null, 2)}
+                                </pre>
+                              </div>
+
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500 text-[10px] font-bold uppercase">Apps Script Response:</span>
+                                  <button
+                                    onClick={() => handleCopy(item.id, item.appsScriptResponse || '', 'response')}
+                                    className="text-[10px] text-blue-400 hover:underline cursor-pointer"
+                                  >
+                                    {copiedTextType?.id === item.id && copiedTextType?.type === 'response' ? 'Copied!' : 'Copy Response'}
+                                  </button>
+                                </div>
+                                <pre className="bg-slate-900/60 p-2 rounded-lg border border-slate-800 text-slate-300 overflow-x-auto max-h-24 select-all text-[10px] font-bold leading-normal text-wrap break-all">
+                                  {item.appsScriptResponse || 'No response captured.'}
+                                </pre>
+                              </div>
+
+                              {item.stackTrace && (
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500 text-[10px] font-bold uppercase">Stack Trace:</span>
+                                    <button
+                                      onClick={() => handleCopy(item.id, item.stackTrace || '', 'stack')}
+                                      className="text-[10px] text-blue-400 hover:underline cursor-pointer"
+                                    >
+                                      {copiedTextType?.id === item.id && copiedTextType?.type === 'stack' ? 'Copied!' : 'Copy Trace'}
+                                    </button>
+                                  </div>
+                                  <pre className="bg-slate-900/60 p-2 rounded-lg border border-slate-800 text-rose-300/80 overflow-x-auto max-h-24 select-all text-[10px] leading-tight text-wrap break-all">
+                                    {item.stackTrace}
+                                  </pre>
+                                </div>
+                              )}
+
+                              {/* Interactive Developer Controls */}
+                              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                                <button
+                                  onClick={() => handleRetryItem(item.id)}
+                                  disabled={isRetryingItem === item.id}
+                                  className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-[11px] rounded-lg transition-all cursor-pointer select-none uppercase font-sans tracking-wide"
+                                >
+                                  <RefreshCw className={`w-3 h-3 ${isRetryingItem === item.id ? 'animate-spin' : ''}`} />
+                                  <span>{isRetryingItem === item.id ? 'Retrying...' : 'Retry Now'}</span>
+                                </button>
+                                
+                                {isDeveloperMode && onOpenLogs && (
+                                  <button
+                                    onClick={onOpenLogs}
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold text-[11px] rounded-lg transition-all cursor-pointer select-none uppercase font-sans tracking-wide border border-slate-600"
+                                  >
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>Open Logs</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {item.syncStatus !== 'failed' && item.errorMessage && (
                         <p className="text-[13px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/10 p-1.5 rounded-lg mt-1 border border-rose-100/50 dark:border-rose-900/20 leading-tight">
                           Error: {item.errorMessage}
                         </p>

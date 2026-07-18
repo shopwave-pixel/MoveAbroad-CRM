@@ -41,6 +41,14 @@ export interface SyncQueueItem {
   payload: any;
   syncStatus: 'pending' | 'syncing' | 'failed';
   errorMessage?: string;
+  httpStatus?: number;
+  backendErrorMessage?: string;
+  appsScriptResponse?: string;
+  requestAction?: string;
+  requestPayload?: string;
+  stackTrace?: string;
+  retryCount?: number;
+  executionTime?: number;
 }
 
 const DB_NAME = 'MoveAboardCRM_DB';

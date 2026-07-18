@@ -491,6 +491,11 @@ export async function queueUpdateCustomer(config: SyncConfig, id: string, update
   const currentCustomer = memoryCustomers.find(c => c.id === id);
   
   if (!currentCustomer) {
+    const errorMsg = `❌ Sync Aborted: Customer record (ID: ${id}) cannot be found in the local cache.`;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: errorMsg } }));
+    }
+    logSyncHistory('UPDATE CUSTOMER FAILED', errorMsg, 'FAILED');
     return { success: false };
   }
 
@@ -550,6 +555,35 @@ export async function queueUpdateCustomer(config: SyncConfig, id: string, update
   await saveCustomersToDb(memoryCustomers);
   notifySubscribers();
 
+  // Get complete customer object
+  const updatedCustomer = memoryCustomers.find(c => c.id === id);
+  if (!updatedCustomer) {
+    const errorMsg = `❌ Sync Aborted: Customer record (ID: ${id}) was lost from local cache during update.`;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: errorMsg } }));
+    }
+    logSyncHistory('UPDATE CUSTOMER FAILED', errorMsg, 'FAILED');
+    return { success: false };
+  }
+
+  // Construct complete queued payload satisfying the required fields
+  const completePayload = {
+    action: 'update_customer',
+    id: updatedCustomer.id,
+    name: updatedCustomer.name || '',
+    mobileNumber: updatedCustomer.mobileNumber || '',
+    whatsAppNumber: updatedCustomer.whatsAppNumber || '',
+    customerCategory: updatedCustomer.customerCategory || '',
+    address: updatedCustomer.address || '',
+    gender: updatedCustomer.gender || '',
+    destinationCountry: updatedCustomer.destinationCountry || '',
+    source: updatedCustomer.source || '',
+    remarks: updatedCustomer.remarks || '',
+    imoNumber: updatedCustomer.imoNumber || '',
+    additionalNumbers: updatedCustomer.additionalNumbers || [],
+    createdAt: updatedCustomer.createdAt || new Date().toISOString()
+  };
+
   // 3. Check if there's already a CREATE_CUSTOMER for this tempId in the queue
   const createItem = memorySyncQueue.find(item => item.customerId === id && item.action === 'CREATE_CUSTOMER');
   if (createItem) {
@@ -558,12 +592,12 @@ export async function queueUpdateCustomer(config: SyncConfig, id: string, update
     await updateSyncQueueItemInDb(createItem);
     logSyncHistory('UPDATE PENDING CUSTOMER', `Merged updates into pending customer ${id}`, 'SUCCESS');
   } else {
-    // Add new EDIT queue item with ONLY modified fields
+    // Add new EDIT queue item with COMPLETE fields
     const queueItem = await addToSyncQueueInDb({
       id: generateTempId('TEMP'),
       action: 'EDIT_CUSTOMER',
       customerId: id,
-      payload: changedFields
+      payload: completePayload
     });
     memorySyncQueue = [...memorySyncQueue, queueItem];
   }
@@ -876,6 +910,24 @@ export async function triggerAutoSync(manualConfig?: SyncConfig) {
         continue;
       }
 
+      // Check if this is EDIT_CUSTOMER and customer is not in local cache
+      if (item.action === 'EDIT_CUSTOMER') {
+        const localCustomer = memoryCustomers.find(c => c.id === item.customerId);
+        if (!localCustomer) {
+          const errorMsg = `Sync Cancelled: Customer record for ID ${item.customerId} was not found in the local cache.`;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `❌ ${errorMsg}` } }));
+          }
+          logSyncHistory('SYNC CANCELLED', errorMsg, 'FAILED');
+          
+          item.syncStatus = 'failed';
+          item.errorMessage = errorMsg;
+          item.backendErrorMessage = errorMsg;
+          await updateSyncQueueItemInDb(item);
+          break; // Cancel the sync loop completely
+        }
+      }
+
       item.syncStatus = 'syncing';
       await updateSyncQueueItemInDb(item);
       notifySubscribers();
@@ -885,18 +937,42 @@ export async function triggerAutoSync(manualConfig?: SyncConfig) {
       const maxRetries = 3;
       let lastError = '';
 
+      // Clear previous debug parameters
+      item.httpStatus = undefined;
+      item.backendErrorMessage = undefined;
+      item.appsScriptResponse = undefined;
+      item.requestAction = undefined;
+      item.requestPayload = undefined;
+      item.stackTrace = undefined;
+      item.retryCount = undefined;
+      item.executionTime = undefined;
+
       while (attempt < maxRetries && !success) {
         try {
-          success = await processSyncItem(activeConfig, item);
+          const res = await processSyncItem(activeConfig, item);
+          success = res.success;
+          
+          // Populate debug info
+          item.httpStatus = res.httpStatus;
+          item.backendErrorMessage = res.backendErrorMessage;
+          item.appsScriptResponse = res.appsScriptResponse;
+          item.requestAction = res.requestAction;
+          item.requestPayload = res.requestPayload;
+          item.stackTrace = res.stackTrace;
+          item.executionTime = res.executionTime;
+
           if (success) {
             break;
           }
-          lastError = 'Server returned failure';
+          lastError = res.backendErrorMessage || 'Server returned failure';
         } catch (err: any) {
           lastError = err.message || String(err);
+          item.backendErrorMessage = lastError;
+          item.stackTrace = err.stack || String(err);
         }
 
         attempt++;
+        item.retryCount = attempt;
         if (!success && attempt < maxRetries) {
           item.syncStatus = 'failed';
           item.errorMessage = `Sync attempt ${attempt}/${maxRetries} failed: ${lastError}. Retrying...`;
@@ -921,6 +997,7 @@ export async function triggerAutoSync(manualConfig?: SyncConfig) {
       } else {
         item.syncStatus = 'failed';
         item.errorMessage = `Failed after ${maxRetries} attempts: ${lastError}`;
+        item.retryCount = maxRetries;
         await updateSyncQueueItemInDb(item);
         logSyncHistory(item.action, `Failed to sync ${item.action} after ${maxRetries} attempts. Moved to Offline Queue.`, 'FAILED');
       }
@@ -930,61 +1007,36 @@ export async function triggerAutoSync(manualConfig?: SyncConfig) {
     console.error("Auto Sync fatal exception:", e);
   } finally {
     isSyncingActive = false;
-    syncStatus = memorySyncQueue.length > 0 ? (activeConflicts.length > 0 ? 'PENDING' : 'PENDING') : 'CONNECTED';
+    syncStatus = memorySyncQueue.length > 0 ? 'PENDING' : 'CONNECTED';
     notifySubscribers();
   }
 }
 
+interface ProcessSyncResult {
+  success: boolean;
+  httpStatus?: number;
+  backendErrorMessage?: string;
+  appsScriptResponse?: string;
+  requestAction?: string;
+  requestPayload?: string;
+  stackTrace?: string;
+  executionTime?: number;
+}
+
 // CORE PROCESSOR FOR SINGLE QUEUE ITEM
-async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise<boolean> {
+async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise<ProcessSyncResult> {
   const url = config.webAppUrl;
+  const startTime = Date.now();
+  let payload: any = null;
   
   if (item.action === 'CREATE_CUSTOMER') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'add_customer',
-        ...item.payload,
-        id: undefined // Don't send temp ID as is, let GAS generate or we match
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    if (resData.success && resData.customer) {
-      const permanentId = resData.customer.id;
-      const temporaryId = item.customerId;
-      
-      // REPLACE TEMP ID WITH PERMANENT ID ACROSS ALL PLACES!
-      memoryCustomers = memoryCustomers.map(c => c.id === temporaryId ? { ...c, id: permanentId } : c);
-      memoryTickets = memoryTickets.map(t => t.customerId === temporaryId ? { ...t, customerId: permanentId } : t);
-      memoryFollowUps = memoryFollowUps.map(f => f.customerId === temporaryId ? { ...f, customerId: permanentId } : f);
-      
-      // Update local storage/IndexedDB with permanent IDs
-      await saveCustomersToDb(memoryCustomers);
-      await saveTicketsToDb(memoryTickets);
-      await saveFollowUpsToDb(memoryFollowUps);
-
-      // Rewrite related sync queue items (e.g. pending tickets/followups for this temp customer!)
-      for (const qItem of memorySyncQueue) {
-        if (qItem.customerId === temporaryId) {
-          qItem.customerId = permanentId;
-          if (qItem.payload && qItem.payload.customerId === temporaryId) {
-            qItem.payload.customerId = permanentId;
-          }
-          await updateSyncQueueItemInDb(qItem);
-        }
-      }
-      return true;
-    }
-    return false;
-  }
-
-  if (item.action === 'EDIT_CUSTOMER') {
-    // SYNC CONFLICT CHECK: Fetch current customer state from Sheets to verify last modified state if needed
-    // In our lightweight system, we fetch or POST and check if server reports newer version.
-    // Let's do a fast verification request to Sheets:
+    payload = {
+      action: 'add_customer',
+      ...item.payload,
+      id: undefined
+    };
+  } else if (item.action === 'EDIT_CUSTOMER') {
+    // Conflict check
     try {
       const checkRes = await fetch(`${url}?action=getCustomer&id=${item.customerId}`);
       if (checkRes.ok) {
@@ -993,20 +1045,13 @@ async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise
           const serverCustomer = checkData.customer;
           const localCustomer = memoryCustomers.find(c => c.id === item.customerId);
           
-          // If server customer has different fields than what we originally had (before our current edits),
-          // let's check for visual and structural divergence.
-          // To be simple and robust: if server and local have both been modified, we register a conflict!
-          // We check if the customer name/mobile/address has changed on the server compared to our original.
-          // If conflict detected, we register it:
           const isConflicting = (
             serverCustomer.name !== localCustomer?.name &&
             serverCustomer.mobileNumber !== localCustomer?.mobileNumber &&
-            // Check if user actually made conflict-causing changes
             item.payload.name && serverCustomer.name !== item.payload.name
           );
 
           if (isConflicting && localCustomer) {
-            // Register active conflict
             activeConflicts.push({
               queueId: item.id,
               customer: localCustomer,
@@ -1014,7 +1059,13 @@ async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise
             });
             notifyConflicts();
             logSyncHistory('SYNC CONFLICT DETECTED', `Conflict on customer ${item.customerId}`, 'FAILED');
-            return false; // Skip sync for now
+            return {
+              success: false,
+              backendErrorMessage: "Sync Conflict Detected",
+              appsScriptResponse: JSON.stringify(checkData),
+              requestAction: 'getCustomer',
+              requestPayload: `id=${item.customerId}`
+            };
           }
         }
       }
@@ -1022,161 +1073,234 @@ async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise
       console.warn("Could not perform conflict pre-check, continuing with standard update", e);
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'update_customer',
-        id: item.customerId,
-        ...item.payload
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    return resData.success;
+    payload = {
+      action: 'update_customer',
+      id: item.customerId,
+      ...item.payload
+    };
+  } else if (item.action === 'DELETE_CUSTOMER') {
+    payload = {
+      action: 'delete_customer',
+      id: item.customerId
+    };
+  } else if (item.action === 'CREATE_TICKET') {
+    payload = {
+      action: 'create_ticket',
+      customerId: item.customerId,
+      name: item.payload.name,
+      mobileNumber: item.payload.mobileNumber,
+      conversationDescription: item.payload.conversationDescription,
+      status: item.payload.status
+    };
+  } else if (item.action === 'UPDATE_TICKET') {
+    payload = {
+      action: 'update_ticket',
+      id: item.payload.id,
+      conversationDescription: item.payload.conversationDescription,
+      status: item.payload.status
+    };
+  } else if (item.action === 'DELETE_TICKET') {
+    payload = {
+      action: 'delete_ticket',
+      id: item.payload.id
+    };
+  } else if (item.action === 'CREATE_FOLLOWUP') {
+    payload = {
+      action: 'create_follow_up',
+      customerId: item.customerId,
+      name: item.payload.name,
+      mobileNumber: item.payload.mobileNumber,
+      followUpDate: item.payload.followUpDate,
+      followUpTime: item.payload.followUpTime,
+      notes: item.payload.notes,
+      status: item.payload.status
+    };
+  } else if (item.action === 'UPDATE_FOLLOWUP') {
+    payload = {
+      action: 'update_follow_up',
+      id: item.payload.id,
+      followUpDate: item.payload.followUpDate,
+      followUpTime: item.payload.followUpTime,
+      notes: item.payload.notes,
+      status: item.payload.status
+    };
+  } else if (item.action === 'DELETE_FOLLOWUP') {
+    payload = {
+      action: 'delete_follow_up',
+      id: item.payload.id
+    };
   }
 
-  if (item.action === 'DELETE_CUSTOMER') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'delete_customer',
-        id: item.customerId
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    return resData.success;
+  const result: ProcessSyncResult = {
+    success: false,
+    requestAction: payload?.action,
+    requestPayload: payload ? JSON.stringify(payload) : undefined
+  };
+
+  if (!payload) {
+    result.backendErrorMessage = "Unknown sync action";
+    result.executionTime = Date.now() - startTime;
+    return result;
   }
 
-  if (item.action === 'CREATE_TICKET') {
+  try {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'create_ticket',
-        customerId: item.customerId,
-        name: item.payload.name,
-        mobileNumber: item.payload.mobileNumber,
-        conversationDescription: item.payload.conversationDescription,
-        status: item.payload.status
-      })
+      body: JSON.stringify(payload)
     });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    if (resData.success && resData.ticket) {
-      const permanentId = resData.ticket.id;
-      const temporaryId = item.payload.id;
-      
-      // Update memory & database with real ticket ID
-      memoryTickets = memoryTickets.map(t => t.id === temporaryId ? { ...t, id: permanentId } : t);
-      await saveTicketsToDb(memoryTickets);
-      return true;
+
+    result.httpStatus = response.status;
+    result.executionTime = Date.now() - startTime;
+
+    const rawText = await response.text();
+    result.appsScriptResponse = rawText;
+
+    if (!response.ok) {
+      result.backendErrorMessage = `HTTP Error ${response.status}: ${response.statusText || rawText.substring(0, 100)}`;
+      return result;
     }
-    return false;
-  }
 
-  if (item.action === 'UPDATE_TICKET') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'update_ticket',
-        id: item.payload.id,
-        conversationDescription: item.payload.conversationDescription,
-        status: item.payload.status
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    return resData.success;
-  }
-
-  if (item.action === 'DELETE_TICKET') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'delete_ticket',
-        id: item.payload.id
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    return resData.success;
-  }
-
-  if (item.action === 'CREATE_FOLLOWUP') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'create_follow_up',
-        customerId: item.customerId,
-        name: item.payload.name,
-        mobileNumber: item.payload.mobileNumber,
-        followUpDate: item.payload.followUpDate,
-        followUpTime: item.payload.followUpTime,
-        notes: item.payload.notes,
-        status: item.payload.status
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    if (resData.success && resData.followUp) {
-      const permanentId = resData.followUp.id;
-      const temporaryId = item.payload.id;
-      
-      // Update memory & database with real followup ID
-      memoryFollowUps = memoryFollowUps.map(f => f.id === temporaryId ? { ...f, id: permanentId } : f);
-      await saveFollowUpsToDb(memoryFollowUps);
-      return true;
+    let resData: any;
+    try {
+      resData = JSON.parse(rawText);
+    } catch (parseError: any) {
+      result.backendErrorMessage = `JSON Parse Error: ${parseError.message || parseError}`;
+      return result;
     }
-    return false;
+
+    if (resData.success) {
+      result.success = true;
+
+      // Handle ID replacement or Cache update side-effects
+      if (item.action === 'CREATE_CUSTOMER' && resData.customer) {
+        const permanentId = resData.customer.id;
+        const temporaryId = item.customerId;
+        
+        memoryCustomers = memoryCustomers.map(c => c.id === temporaryId ? { ...c, id: permanentId } : c);
+        memoryTickets = memoryTickets.map(t => t.customerId === temporaryId ? { ...t, customerId: permanentId } : t);
+        memoryFollowUps = memoryFollowUps.map(f => f.customerId === temporaryId ? { ...f, customerId: permanentId } : f);
+        
+        await saveCustomersToDb(memoryCustomers);
+        await saveTicketsToDb(memoryTickets);
+        await saveFollowUpsToDb(memoryFollowUps);
+
+        for (const qItem of memorySyncQueue) {
+          if (qItem.customerId === temporaryId) {
+            qItem.customerId = permanentId;
+            if (qItem.payload && qItem.payload.customerId === temporaryId) {
+              qItem.payload.customerId = permanentId;
+            }
+            await updateSyncQueueItemInDb(qItem);
+          }
+        }
+      } else if (item.action === 'CREATE_TICKET' && resData.ticket) {
+        const permanentId = resData.ticket.id;
+        const temporaryId = item.payload.id;
+        memoryTickets = memoryTickets.map(t => t.id === temporaryId ? { ...t, id: permanentId } : t);
+        await saveTicketsToDb(memoryTickets);
+      } else if (item.action === 'CREATE_FOLLOWUP' && resData.followUp) {
+        const permanentId = resData.followUp.id;
+        const temporaryId = item.payload.id;
+        memoryFollowUps = memoryFollowUps.map(f => f.id === temporaryId ? { ...f, id: permanentId } : f);
+        await saveFollowUpsToDb(memoryFollowUps);
+      }
+    } else {
+      result.backendErrorMessage = resData.error || "Server returned success: false";
+    }
+
+  } catch (error: any) {
+    result.executionTime = Date.now() - startTime;
+    result.backendErrorMessage = error.message || String(error);
+    result.stackTrace = error.stack || String(error);
   }
 
-  if (item.action === 'UPDATE_FOLLOWUP') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'update_follow_up',
-        id: item.payload.id,
-        followUpDate: item.payload.followUpDate,
-        followUpTime: item.payload.followUpTime,
-        notes: item.payload.notes,
-        status: item.payload.status
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    return resData.success;
+  return result;
+}
+
+export async function retryQueueItem(queueId: string) {
+  // Find the queue item in memory or DB
+  const item = memorySyncQueue.find(q => q.id === queueId);
+  if (!item) return { success: false, error: 'Queue item not found' };
+
+  // If customer is not found in the local cache, cancel/fail manual retry immediately
+  if (item.action === 'EDIT_CUSTOMER') {
+    const localCustomer = memoryCustomers.find(c => c.id === item.customerId);
+    if (!localCustomer) {
+      const errorMsg = `Manual retry cancelled: Customer record for ID ${item.customerId} was not found in the local cache.`;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: `❌ ${errorMsg}` } }));
+      }
+      item.syncStatus = 'failed';
+      item.errorMessage = errorMsg;
+      item.backendErrorMessage = errorMsg;
+      await updateSyncQueueItemInDb(item);
+      logSyncHistory(item.action, errorMsg, 'FAILED');
+      notifySubscribers();
+      return { success: false, error: errorMsg };
+    }
   }
 
-  if (item.action === 'DELETE_FOLLOWUP') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'delete_follow_up',
-        id: item.payload.id
-      })
-    });
-    
-    if (!response.ok) return false;
-    const resData = await response.json();
-    return resData.success;
+  // Set syncing status
+  item.syncStatus = 'syncing';
+  notifySubscribers();
+
+  const envApiUrl = (import.meta as any).env?.VITE_API_URL || '';
+  const storedConfig = typeof localStorage !== 'undefined' ? localStorage.getItem('move_abroad_crm_sync_config') : null;
+  let activeConfig: SyncConfig = { webAppUrl: envApiUrl, isLiveMode: !!envApiUrl };
+  if (storedConfig) {
+    try { activeConfig = JSON.parse(storedConfig); } catch (e) {}
   }
 
-  return false;
+  // Clear previous debug parameters
+  item.httpStatus = undefined;
+  item.backendErrorMessage = undefined;
+  item.appsScriptResponse = undefined;
+  item.requestAction = undefined;
+  item.requestPayload = undefined;
+  item.stackTrace = undefined;
+  item.retryCount = undefined;
+  item.executionTime = undefined;
+
+  try {
+    const res = await processSyncItem(activeConfig, item);
+    item.httpStatus = res.httpStatus;
+    item.backendErrorMessage = res.backendErrorMessage;
+    item.appsScriptResponse = res.appsScriptResponse;
+    item.requestAction = res.requestAction;
+    item.requestPayload = res.requestPayload;
+    item.stackTrace = res.stackTrace;
+    item.executionTime = res.executionTime;
+    item.retryCount = 1;
+
+    if (res.success) {
+      await removeFromSyncQueueInDb(item.id);
+      memorySyncQueue = memorySyncQueue.filter(q => q.id !== item.id);
+      logSyncHistory(item.action, `Successfully synced ${item.action} for ${item.customerId} via manual retry`, 'SUCCESS');
+      
+      lastSyncTime = new Date();
+      await setCacheMetadataInDb('lastSyncTime', lastSyncTime.toISOString());
+      notifySubscribers();
+      return { success: true };
+    } else {
+      item.syncStatus = 'failed';
+      item.errorMessage = `Manual retry failed: ${res.backendErrorMessage || 'Server returned failure'}`;
+      await updateSyncQueueItemInDb(item);
+      logSyncHistory(item.action, `Manual retry failed for ${item.action}: ${res.backendErrorMessage}`, 'FAILED');
+      notifySubscribers();
+      return { success: false, error: res.backendErrorMessage };
+    }
+  } catch (err: any) {
+    const errMsg = err.message || String(err);
+    item.syncStatus = 'failed';
+    item.errorMessage = `Manual retry threw error: ${errMsg}`;
+    item.backendErrorMessage = errMsg;
+    item.stackTrace = err.stack || String(err);
+    await updateSyncQueueItemInDb(item);
+    logSyncHistory(item.action, `Manual retry error: ${errMsg}`, 'FAILED');
+    notifySubscribers();
+    return { success: false, error: errMsg };
+  }
 }
 
 // RESOLVE CONFLICT ACTION

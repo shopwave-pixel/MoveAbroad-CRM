@@ -1260,6 +1260,11 @@ export default function App() {
         lastSyncTime={lastSyncTime}
         syncHistory={syncHistory}
         config={config}
+        isDeveloperMode={isDeveloperMode}
+        onOpenLogs={() => {
+          setShowSyncCenter(false);
+          setActiveTab('debug');
+        }}
       />
     </div>
   );
