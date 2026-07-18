@@ -128,15 +128,15 @@ function doPost(e) {
         if (!exists) {
           const userId = "USR-000001";
           const createdAt = new Date().toISOString();
-          sheets.usersSheet.appendRow([
-            userId,
-            adminFullName,
-            adminLoginId,
-            adminPasswordHash,
-            "Admin",
-            "Active",
-            createdAt
-          ]);
+          appendRowByHeader(sheets.usersSheet, {
+            "User ID": userId,
+            "Full Name": adminFullName,
+            "Login ID": adminLoginId,
+            "Password": adminPasswordHash,
+            "Role": "Admin",
+            "Status": "Active",
+            "Created At": createdAt
+          });
         }
       }
       return jsonResponse({
@@ -174,15 +174,15 @@ function doPost(e) {
         const userId = "USR-000001";
         const createdAt = new Date().toISOString();
         const defaultHash = hashPassword("2026");
-        sheets.usersSheet.appendRow([
-          userId,
-          "Admin",
-          "admin",
-          defaultHash,
-          "Admin",
-          "Active",
-          createdAt
-        ]);
+        appendRowByHeader(sheets.usersSheet, {
+          "User ID": userId,
+          "Full Name": "Admin",
+          "Login ID": "admin",
+          "Password": defaultHash,
+          "Role": "Admin",
+          "Status": "Active",
+          "Created At": createdAt
+        });
         SpreadsheetApp.flush();
         users = getUsers(sheets.usersSheet);
       }
@@ -268,15 +268,15 @@ function doPost(e) {
       const userId = "USR-" + nextNum.toString().padStart(6, '0');
       const createdAt = new Date().toISOString();
       
-      sheets.usersSheet.appendRow([
-        userId,
-        fullName,
-        loginId,
-        passwordHash,
-        role,
-        status,
-        createdAt
-      ]);
+      appendRowByHeader(sheets.usersSheet, {
+        "User ID": userId,
+        "Full Name": fullName,
+        "Login ID": loginId,
+        "Password": passwordHash,
+        "Role": role,
+        "Status": status,
+        "Created At": createdAt
+      });
       
       // Verify user was actually written before returning success
       SpreadsheetApp.flush();
@@ -329,7 +329,7 @@ function doPost(e) {
         updateData["Password"] = passwordHash;
       }
       
-      const updated = updateRowById(sheets.usersSheet, id, 0, updateData);
+      const updated = updateRowById(sheets.usersSheet, id, "User ID", updateData);
       if (updated) {
         return jsonResponse({ success: true, message: "User updated successfully." });
       } else {
@@ -343,7 +343,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "User ID is required." });
       }
       
-      const deleted = deleteRowById(sheets.usersSheet, id, 0);
+      const deleted = deleteRowById(sheets.usersSheet, id, "User ID");
       if (deleted) {
         return jsonResponse({ success: true, message: "User deleted successfully." });
       } else {
@@ -384,19 +384,19 @@ function doPost(e) {
       const customerId = "CUS-" + nextNum.toString().padStart(6, '0');
       const createdAt = new Date().toISOString();
       
-      sheets.customersSheet.appendRow([
-        customerId, 
-        name, 
-        mobileNumber, 
-        whatsAppNumber, 
-        destinationCountry, 
-        source, 
-        remarks, 
-        createdAt,
-        customerCategory,
-        address,
-        gender
-      ]);
+      appendRowByHeader(sheets.customersSheet, {
+        "Customer ID": customerId,
+        "Full Name": name,
+        "Mobile Number": mobileNumber,
+        "WhatsApp Number": whatsAppNumber,
+        "Destination Country": destinationCountry,
+        "Source": source,
+        "Remarks": remarks,
+        "Created At": createdAt,
+        "Customer Category": customerCategory,
+        "Address": address,
+        "Gender": gender
+      });
       
       const newCustomer = {
         id: customerId,
@@ -441,7 +441,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "Another customer with this mobile number already exists." });
       }
 
-      const updated = updateRowById(sheets.customersSheet, id, 0, {
+      const updated = updateRowById(sheets.customersSheet, id, "Customer ID", {
         "Full Name": name,
         "Mobile Number": mobileNumber,
         "WhatsApp Number": whatsAppNumber,
@@ -470,7 +470,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "Customer ID is required." });
       }
 
-      const deleted = deleteRowById(sheets.customersSheet, id, 0);
+      const deleted = deleteRowById(sheets.customersSheet, id, "Customer ID");
       if (deleted) {
         deleteCascadeByCustomerId(sheets, id);
         return jsonResponse({ success: true, message: "Customer and associated records deleted." });
@@ -504,15 +504,15 @@ function doPost(e) {
       const ticketId = "TKT-" + nextNum.toString().padStart(6, '0');
       const createdAt = new Date().toISOString();
       
-      sheets.ticketsSheet.appendRow([
-        ticketId,
-        customerId,
-        name,
-        mobileNumber,
-        conversationDescription,
-        status,
-        createdAt
-      ]);
+      appendRowByHeader(sheets.ticketsSheet, {
+        "Ticket ID": ticketId,
+        "Customer ID": customerId,
+        "Customer Name": name,
+        "Mobile Number": mobileNumber,
+        "Conversation Description": conversationDescription,
+        "Status": status,
+        "Created At": createdAt
+      });
       
       const newTicket = {
         id: ticketId,
@@ -540,7 +540,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "Ticket ID and Description are required." });
       }
 
-      const updated = updateRowById(sheets.ticketsSheet, id, 0, {
+      const updated = updateRowById(sheets.ticketsSheet, id, "Ticket ID", {
         "Conversation Description": conversationDescription,
         "Status": status
       });
@@ -558,7 +558,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "Ticket ID is required." });
       }
 
-      const deleted = deleteRowById(sheets.ticketsSheet, id, 0);
+      const deleted = deleteRowById(sheets.ticketsSheet, id, "Ticket ID");
       if (deleted) {
         return jsonResponse({ success: true, message: "Ticket deleted successfully." });
       } else {
@@ -592,17 +592,17 @@ function doPost(e) {
       const followUpId = "FUP-" + nextNum.toString().padStart(6, '0');
       const createdAt = new Date().toISOString();
 
-      sheets.followUpsSheet.appendRow([
-        followUpId,
-        customerId,
-        name,
-        mobileNumber,
-        followUpDate,
-        followUpTime,
-        notes,
-        status,
-        createdAt
-      ]);
+      appendRowByHeader(sheets.followUpsSheet, {
+        "Follow-up ID": followUpId,
+        "Customer ID": customerId,
+        "Customer Name": name,
+        "Mobile Number": mobileNumber,
+        "Follow-up Date": followUpDate,
+        "Follow-up Time": followUpTime,
+        "Notes": notes,
+        "Status": status,
+        "Created At": createdAt
+      });
 
       const newFollowUp = {
         id: followUpId,
@@ -634,7 +634,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "ID, Date, and Time are required." });
       }
 
-      const updated = updateRowById(sheets.followUpsSheet, id, 0, {
+      const updated = updateRowById(sheets.followUpsSheet, id, "Follow-up ID", {
         "Follow-up Date": followUpDate,
         "Follow-up Time": followUpTime,
         "Notes": notes,
@@ -656,7 +656,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "ID is required." });
       }
 
-      const updated = updateRowById(sheets.followUpsSheet, id, 0, {
+      const updated = updateRowById(sheets.followUpsSheet, id, "Follow-up ID", {
         "Status": status
       });
 
@@ -673,7 +673,7 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "ID is required." });
       }
 
-      const deleted = deleteRowById(sheets.followUpsSheet, id, 0);
+      const deleted = deleteRowById(sheets.followUpsSheet, id, "Follow-up ID");
       if (deleted) {
         return jsonResponse({ success: true, message: "Follow-up deleted successfully." });
       } else {
@@ -756,7 +756,14 @@ function setupSheets() {
     const headersToAppend = [];
     for (let i = 0; i < requiredHeaders.length; i++) {
       const reqHeader = requiredHeaders[i];
-      if (existingHeaders.indexOf(reqHeader) === -1) {
+      let found = false;
+      for (let j = 0; j < existingHeaders.length; j++) {
+        if (existingHeaders[j].toLowerCase() === reqHeader.trim().toLowerCase()) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
         headersToAppend.push(reqHeader);
       }
     }
@@ -918,9 +925,14 @@ function getFollowUps(sheet) {
   });
 }
 
-// Generic row deletion helper
-function deleteRowById(sheet, id, idColIndex) {
+// Generic row deletion helper by header name
+function deleteRowById(sheet, id, idColName) {
   const data = sheet.getDataRange().getValues();
+  if (data.length === 0) return false;
+  const headers = data[0].map(h => String(h).trim());
+  const idColIndex = headers.indexOf(idColName);
+  if (idColIndex === -1) return false;
+  
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idColIndex]) === id) {
       sheet.deleteRow(i + 1);
@@ -930,10 +942,14 @@ function deleteRowById(sheet, id, idColIndex) {
   return false;
 }
 
-// Generic row update helper
-function updateRowById(sheet, id, idColIndex, newValuesMap) {
+// Generic row update helper by header name
+function updateRowById(sheet, id, idColName, newValuesMap) {
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
+  if (data.length === 0) return false;
+  const headers = data[0].map(h => String(h).trim());
+  const idColIndex = headers.indexOf(idColName);
+  if (idColIndex === -1) return false;
+  
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idColIndex]) === id) {
       for (let colName in newValuesMap) {
@@ -948,23 +964,71 @@ function updateRowById(sheet, id, idColIndex, newValuesMap) {
   return false;
 }
 
+// Generic dynamic row append helper that maps payload object to the exact column positions based on headers
+function appendRowByHeader(sheet, valueMap) {
+  const lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return;
+  
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) {
+    return String(h).trim();
+  });
+  
+  const rowValues = [];
+  for (let i = 0; i < headers.length; i++) {
+    const headerName = headers[i];
+    if (headerName in valueMap) {
+      rowValues.push(valueMap[headerName]);
+    } else {
+      rowValues.push('');
+    }
+  }
+  
+  sheet.appendRow(rowValues);
+}
+
 // Cascade update denormalized customer names and mobile numbers across sheets
 function updateDenormalizedCustomerData(sheets, customerId, newName, newMobile) {
   // Update Tickets
   const ticketData = sheets.ticketsSheet.getDataRange().getValues();
-  for (let i = 1; i < ticketData.length; i++) {
-    if (String(ticketData[i][1]) === customerId) { // Customer ID is col 1 (B)
-      sheets.ticketsSheet.getRange(i + 1, 3).setValue(newName);       // Customer Name is col 2 (C, 1-indexed is 3)
-      sheets.ticketsSheet.getRange(i + 1, 4).setValue(newMobile);    // Mobile Number is col 3 (D, 1-indexed is 4)
+  if (ticketData.length > 0) {
+    const headers = ticketData[0].map(h => String(h).trim());
+    const custIdIdx = headers.indexOf("Customer ID");
+    const custNameIdx = headers.indexOf("Customer Name");
+    const mobileIdx = headers.indexOf("Mobile Number");
+    
+    if (custIdIdx !== -1) {
+      for (let i = 1; i < ticketData.length; i++) {
+        if (String(ticketData[i][custIdIdx]) === customerId) {
+          if (custNameIdx !== -1) {
+            sheets.ticketsSheet.getRange(i + 1, custNameIdx + 1).setValue(newName);
+          }
+          if (mobileIdx !== -1) {
+            sheets.ticketsSheet.getRange(i + 1, mobileIdx + 1).setValue(newMobile);
+          }
+        }
+      }
     }
   }
   
   // Update Followups
   const followUpData = sheets.followUpsSheet.getDataRange().getValues();
-  for (let i = 1; i < followUpData.length; i++) {
-    if (String(followUpData[i][1]) === customerId) { // Customer ID is col 1 (B)
-      sheets.followUpsSheet.getRange(i + 1, 3).setValue(newName);     // Customer Name is col 2 (C, 1-indexed is 3)
-      sheets.followUpsSheet.getRange(i + 1, 4).setValue(newMobile);  // Mobile Number is col 3 (D, 1-indexed is 4)
+  if (followUpData.length > 0) {
+    const headers = followUpData[0].map(h => String(h).trim());
+    const custIdIdx = headers.indexOf("Customer ID");
+    const custNameIdx = headers.indexOf("Customer Name");
+    const mobileIdx = headers.indexOf("Mobile Number");
+    
+    if (custIdIdx !== -1) {
+      for (let i = 1; i < followUpData.length; i++) {
+        if (String(followUpData[i][custIdIdx]) === customerId) {
+          if (custNameIdx !== -1) {
+            sheets.followUpsSheet.getRange(i + 1, custNameIdx + 1).setValue(newName);
+          }
+          if (mobileIdx !== -1) {
+            sheets.followUpsSheet.getRange(i + 1, mobileIdx + 1).setValue(newMobile);
+          }
+        }
+      }
     }
   }
 }
@@ -973,17 +1037,29 @@ function updateDenormalizedCustomerData(sheets, customerId, newName, newMobile) 
 function deleteCascadeByCustomerId(sheets, customerId) {
   // Delete from tickets
   const ticketData = sheets.ticketsSheet.getDataRange().getValues();
-  for (let i = ticketData.length - 1; i >= 1; i--) {
-    if (String(ticketData[i][1]) === customerId) {
-      sheets.ticketsSheet.deleteRow(i + 1);
+  if (ticketData.length > 0) {
+    const headers = ticketData[0].map(h => String(h).trim());
+    const custIdIdx = headers.indexOf("Customer ID");
+    if (custIdIdx !== -1) {
+      for (let i = ticketData.length - 1; i >= 1; i--) {
+        if (String(ticketData[i][custIdIdx]) === customerId) {
+          sheets.ticketsSheet.deleteRow(i + 1);
+        }
+      }
     }
   }
   
   // Delete from followups
   const followUpData = sheets.followUpsSheet.getDataRange().getValues();
-  for (let i = followUpData.length - 1; i >= 1; i--) {
-    if (String(followUpData[i][1]) === customerId) {
-      sheets.followUpsSheet.deleteRow(i + 1);
+  if (followUpData.length > 0) {
+    const headers = followUpData[0].map(h => String(h).trim());
+    const custIdIdx = headers.indexOf("Customer ID");
+    if (custIdIdx !== -1) {
+      for (let i = followUpData.length - 1; i >= 1; i--) {
+        if (String(followUpData[i][custIdIdx]) === customerId) {
+          sheets.followUpsSheet.deleteRow(i + 1);
+        }
+      }
     }
   }
 }
