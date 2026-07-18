@@ -33,9 +33,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
   const baseStyle = "inline-flex items-center justify-center gap-2 font-bold uppercase transition-all duration-200 cursor-pointer select-none active:scale-95 disabled:opacity-50 disabled:pointer-events-none";
   
   const sizeStyles = {
-    sm: "px-3 py-1.5 text-[10px] h-9 rounded-lg",
-    md: "px-4 py-2.5 text-xs h-11 rounded-xl",
-    lg: "px-6 py-3.5 text-xs h-12 rounded-full",
+    sm: "px-3 py-1.5 text-[13px] h-9 rounded-lg",
+    md: "px-4 py-2.5 text-[14px] h-11 rounded-xl",
+    lg: "px-6 py-3.5 text-[15px] h-12 rounded-full",
   };
 
   const variantStyles = {
@@ -80,7 +80,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   disabled,
   ...props
 }, ref) => {
-  const baseStyle = "w-full text-xs bg-[#F8FAFC] dark:bg-[#151510]/50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 text-[#1F2937] dark:text-[#ecece5] transition-all font-medium uppercase placeholder-gray-400";
+  const baseStyle = "w-full text-sm bg-[#F8FAFC] dark:bg-[#151510]/50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 text-[#1F2937] dark:text-[#ecece5] transition-all font-medium uppercase placeholder-gray-400";
   const stateStyle = error
     ? "border-rose-400 focus:ring-rose-400/20 focus:border-rose-500"
     : "border-gray-200 dark:border-[#8a8a70]/30 focus:ring-accent-blue/20 focus:border-accent-blue";
@@ -112,7 +112,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(({
   children,
   ...props
 }, ref) => {
-  const baseStyle = "w-full text-xs bg-[#F8FAFC] dark:bg-[#151510]/50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 text-[#1F2937] dark:text-[#ecece5] transition-all font-bold uppercase cursor-pointer";
+  const baseStyle = "w-full text-sm bg-[#F8FAFC] dark:bg-[#151510]/50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 text-[#1F2937] dark:text-[#ecece5] transition-all font-bold uppercase cursor-pointer";
   const stateStyle = error
     ? "border-rose-400 focus:ring-rose-400/20 focus:border-rose-500"
     : "border-gray-200 dark:border-[#8a8a70]/30 focus:ring-accent-blue/20 focus:border-accent-blue";
@@ -145,7 +145,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(({
   disabled,
   ...props
 }, ref) => {
-  const baseStyle = "w-full text-xs bg-[#F8FAFC] dark:bg-[#151510]/50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 text-[#1F2937] dark:text-[#ecece5] transition-all font-medium uppercase placeholder-gray-400 resize-none";
+  const baseStyle = "w-full text-sm bg-[#F8FAFC] dark:bg-[#151510]/50 border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 text-[#1F2937] dark:text-[#ecece5] transition-all font-medium uppercase placeholder-gray-400 resize-none";
   const stateStyle = error
     ? "border-rose-400 focus:ring-rose-400/20 focus:border-rose-500"
     : "border-gray-200 dark:border-[#8a8a70]/30 focus:ring-accent-blue/20 focus:border-accent-blue";
@@ -188,16 +188,16 @@ export const FormGroup: React.FC<FormGroupProps> = ({
   return (
     <div className={`space-y-1.5 ${className}`}>
       {label && (
-        <label htmlFor={htmlFor} className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
+        <label htmlFor={htmlFor} className="block text-sm font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
           {label} {required && <span className="text-rose-500">*</span>}
         </label>
       )}
       {children}
       {description && (
-        <p className="text-[9px] text-gray-400 uppercase font-semibold">{description}</p>
+        <p className="text-[13px] text-gray-400 uppercase font-semibold">{description}</p>
       )}
       {error && (
-        <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">{error}</p>
+        <p className="text-sm font-bold text-rose-500 uppercase tracking-wider">{error}</p>
       )}
     </div>
   );
@@ -262,7 +262,7 @@ export const Badge: React.FC<BadgeProps> = ({
   children,
   ...props
 }) => {
-  const baseStyle = "inline-flex items-center gap-1 font-mono text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider select-none shrink-0 border";
+  const baseStyle = "inline-flex items-center gap-1 font-mono text-[13px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider select-none shrink-0 border";
 
   const colorStyles = {
     olive: outline 
@@ -315,7 +315,7 @@ export const Alert: React.FC<AlertProps> = ({
   children,
   ...props
 }) => {
-  const baseStyle = "p-4 border rounded-xl flex items-start gap-2.5 text-xs leading-tight font-semibold uppercase";
+  const baseStyle = "p-4 border rounded-xl flex items-start gap-2.5 text-[13px] leading-tight font-semibold uppercase";
 
   const styles = {
     success: "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30 text-emerald-800 dark:text-emerald-400",

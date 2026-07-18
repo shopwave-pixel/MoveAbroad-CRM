@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Customer, Ticket, TicketStatus, FollowUp } from '../types';
+import { Customer, AdditionalNumber, Ticket, TicketStatus, FollowUp } from '../types';
 import SmartContactActions from './SmartContactActions';
 import InlineCopy from './InlineCopy';
+import { getCustomerTimeline } from '../utils/activityLogger';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -47,7 +48,8 @@ interface CustomerDetailsProps {
     imoNumber?: string,
     customerCategory?: string,
     address?: string,
-    gender?: string
+    gender?: string,
+    additionalNumbers?: AdditionalNumber[]
   ) => Promise<{ success: boolean; error?: string }>;
   onDeleteCustomer: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -93,6 +95,21 @@ const CustomerDetails = React.memo(function CustomerDetails({
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(customer.name);
   const [editMobile, setEditMobile] = useState(customer.mobileNumber);
+  const [editAdditionalNumbers, setEditAdditionalNumbers] = useState<{ id: string; suffix: string }[]>([]);
+
+  const handleAddEditAdditionalNumberRow = () => {
+    const id = `AN-TEMP-${Math.floor(100000 + Math.random() * 900000)}`;
+    setEditAdditionalNumbers(prev => [...prev, { id, suffix: '' }]);
+  };
+
+  const handleRemoveEditAdditionalNumberRow = (id: string) => {
+    setEditAdditionalNumbers(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleEditAdditionalNumberChange = (id: string, value: string) => {
+    setEditAdditionalNumbers(prev => prev.map(item => item.id === id ? { ...item, suffix: value } : item));
+  };
+
   const [editWhatsApp, setEditWhatsApp] = useState(customer.whatsAppNumber || '');
   const [isSameAsMobile, setIsSameAsMobile] = useState(customer.whatsAppNumber === customer.mobileNumber);
   const [editImo, setEditImo] = useState(customer.imoNumber || '');
@@ -129,6 +146,14 @@ const CustomerDetails = React.memo(function CustomerDetails({
   useEffect(() => {
     setEditName(customer.name);
     setEditMobile(customer.mobileNumber);
+    if (customer.additionalNumbers) {
+      setEditAdditionalNumbers(customer.additionalNumbers.map(an => ({
+        id: an.id,
+        suffix: an.number.startsWith('+880') ? an.number.slice(4) : an.number
+      })));
+    } else {
+      setEditAdditionalNumbers([]);
+    }
     setEditWhatsApp(customer.whatsAppNumber || '');
     setIsSameAsMobile(customer.whatsAppNumber === customer.mobileNumber);
     setEditImo(customer.imoNumber || '');
@@ -138,7 +163,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
     setEditGender(customer.gender || '');
     setCategorySearchQuery(customer.customerCategory || '');
     setEditAddress(customer.address || '');
-  }, [customer]);
+  }, [customer, isEditing]);
 
   // Click outside category dropdown
   useEffect(() => {
@@ -175,6 +200,9 @@ const CustomerDetails = React.memo(function CustomerDetails({
   // Remarks Auto-Save Inline States
   const [remarksInput, setRemarksInput] = useState(customer.remarks || '');
   const [remarksSaveStatus, setRemarksSaveStatus] = useState<'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED'>('IDLE');
+  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'tickets' | 'followups'>('timeline');
+  const [newNumLabel, setNewNumLabel] = useState('');
+  const [newNumVal, setNewNumVal] = useState('');
 
   // Sync remarks input when customer remarks changes externally
   useEffect(() => {
@@ -239,6 +267,122 @@ const CustomerDetails = React.memo(function CustomerDetails({
   
   // Deleting State
   const [isConfirmDeleting, setIsConfirmDeleting] = useState(false);
+
+  // Add additional number
+  const handleAddAdditionalNumber = async () => {
+    const label = newNumLabel.trim();
+    const value = newNumVal.trim();
+    if (!label || !value) return;
+
+    const type = (label.toLowerCase() === 'secondary' || label.toLowerCase() === 'additional') 
+      ? (label.charAt(0).toUpperCase() + label.slice(1).toLowerCase()) as 'Secondary' | 'Additional' 
+      : 'Additional';
+
+    const updatedNumbers = [...(customer.additionalNumbers || [])];
+    const exists = updatedNumbers.some(n => n.number.replace(/\D/g, '') === value.replace(/\D/g, '')) || 
+                   customer.mobileNumber.replace(/\D/g, '') === value.replace(/\D/g, '');
+    if (exists) {
+      setAlert({ type: 'error', message: 'Number already registered for this customer.' });
+      return;
+    }
+
+    const newNum: AdditionalNumber = {
+      id: `AN-${Math.floor(100000 + Math.random() * 900000)}`,
+      type,
+      number: value
+    };
+    updatedNumbers.push(newNum);
+
+    setAlert({ type: 'loading', message: 'Adding additional number...' });
+    const res = await onUpdateCustomer(
+      customer.id,
+      customer.name,
+      customer.mobileNumber,
+      customer.whatsAppNumber || '',
+      customer.destinationCountry || '',
+      customer.source || 'Other',
+      customer.remarks || '',
+      customer.imoNumber || '',
+      customer.customerCategory || '',
+      customer.address || '',
+      customer.gender || '',
+      updatedNumbers
+    );
+
+    if (res.success) {
+      setNewNumLabel('');
+      setNewNumVal('');
+      setAlert({ type: 'success', message: 'Additional contact number added!' });
+      setTimeout(() => setAlert({ type: 'idle', message: '' }), 1500);
+    } else {
+      setAlert({ type: 'error', message: res.error || 'Failed to add contact number' });
+    }
+  };
+
+  // Remove additional number
+  const handleRemoveAdditionalNumber = async (numToRemove: string) => {
+    const updatedNumbers = (customer.additionalNumbers || []).filter(n => n.number !== numToRemove);
+    
+    setAlert({ type: 'loading', message: 'Removing contact number...' });
+    const res = await onUpdateCustomer(
+      customer.id,
+      customer.name,
+      customer.mobileNumber,
+      customer.whatsAppNumber || '',
+      customer.destinationCountry || '',
+      customer.source || 'Other',
+      customer.remarks || '',
+      customer.imoNumber || '',
+      customer.customerCategory || '',
+      customer.address || '',
+      customer.gender || '',
+      updatedNumbers
+    );
+
+    if (res.success) {
+      setAlert({ type: 'success', message: 'Contact number removed.' });
+      setTimeout(() => setAlert({ type: 'idle', message: '' }), 1500);
+    } else {
+      setAlert({ type: 'error', message: res.error || 'Failed to remove contact number' });
+    }
+  };
+
+  // Set an additional number as primary (Swaps with current primary/main mobile)
+  const handleSetPrimaryNumber = async (numToMakePrimary: AdditionalNumber) => {
+    const oldPrimaryMobile = customer.mobileNumber;
+    const oldPrimaryType: 'Secondary' | 'Additional' = 'Secondary';
+
+    const updatedNumbers = (customer.additionalNumbers || [])
+      .filter(n => n.number !== numToMakePrimary.number)
+      .concat({ 
+        id: `AN-${Math.floor(100000 + Math.random() * 900000)}`,
+        type: oldPrimaryType, 
+        number: oldPrimaryMobile 
+      });
+
+    setAlert({ type: 'loading', message: 'Updating primary contact number...' });
+    const res = await onUpdateCustomer(
+      customer.id,
+      customer.name,
+      numToMakePrimary.number,
+      customer.whatsAppNumber || '',
+      customer.destinationCountry || '',
+      customer.source || 'Other',
+      customer.remarks || '',
+      customer.imoNumber || '',
+      customer.customerCategory || '',
+      customer.address || '',
+      customer.gender || '',
+      updatedNumbers
+    );
+
+    if (res.success) {
+      setAlert({ type: 'success', message: 'Primary mobile number updated successfully!' });
+      setTimeout(() => setAlert({ type: 'idle', message: '' }), 1500);
+    } else {
+      setAlert({ type: 'error', message: res.error || 'Failed to update primary mobile number' });
+    }
+  };
 
   // Status Alerts
   const [alert, setAlert] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({
@@ -325,17 +469,72 @@ const CustomerDetails = React.memo(function CustomerDetails({
       return;
     }
 
+    // Validate and check duplicate numbers within the same customer
+    const suffixesSeen = new Set<string>();
+    const digitsOnlyPrimary = trimmedMobile.replace(/\D/g, '');
+    if (digitsOnlyPrimary) {
+      suffixesSeen.add(digitsOnlyPrimary);
+    }
+
+    let invalidFormatFound = false;
+    let duplicateFoundInside = false;
+
+    for (const addNum of editAdditionalNumbers) {
+      const s = addNum.suffix.trim();
+      const digits = s.replace(/\D/g, '');
+      if (!s || digits.length < 9) {
+        invalidFormatFound = true;
+      }
+      if (suffixesSeen.has(digits)) {
+        duplicateFoundInside = true;
+      }
+      suffixesSeen.add(digits);
+    }
+
+    if (invalidFormatFound) {
+      setAlert({ type: 'error', message: 'Valid mobile number required for all fields.' });
+      return;
+    } else if (duplicateFoundInside) {
+      setAlert({ type: 'error', message: 'Duplicate mobile numbers found for this customer.' });
+      return;
+    }
+
     // Check duplicate mobile numbers, ignoring current customer
-    const digitsOnly = trimmedMobile.replace(/\D/g, '');
-    const isDuplicate = existingCustomers.some(c => c.id !== customer.id && c.mobileNumber.replace(/\D/g, '') === digitsOnly);
-    if (isDuplicate) {
-      setAlert({ type: 'error', message: 'Another customer with this mobile number already exists.' });
+    let existsInDb = false;
+    for (const suffix of Array.from(suffixesSeen)) {
+      const isDuplicate = existingCustomers.some(c => {
+        if (c.id === customer.id) return false;
+        const mainDigits = c.mobileNumber.replace(/\D/g, '');
+        if (mainDigits === suffix) return true;
+        const addDigits = (c.additionalNumbers || []).map(an => an.number.replace(/\D/g, ''));
+        if (addDigits.includes(suffix)) return true;
+        return false;
+      });
+      if (isDuplicate) {
+        existsInDb = true;
+        break;
+      }
+    }
+
+    if (existsInDb) {
+      setAlert({ type: 'error', message: 'Another customer with one of these mobile numbers already exists.' });
       return;
     }
 
     setAlert({ type: 'loading', message: 'Saving customer profile changes...' });
 
     try {
+      const updatedAdditionalNumbers: AdditionalNumber[] = editAdditionalNumbers.map(an => {
+        const cleanSuffix = an.suffix.trim();
+        const normalized = cleanSuffix.startsWith('0') ? cleanSuffix.slice(1) : cleanSuffix;
+        const formattedNum = `+880${normalized}`;
+        return {
+          id: an.id,
+          type: 'Additional',
+          number: formattedNum
+        };
+      });
+
       const res = await onUpdateCustomer(
         customer.id, 
         trimmedName, 
@@ -347,7 +546,8 @@ const CustomerDetails = React.memo(function CustomerDetails({
         finalImo,
         editCategory,
         editAddress.trim(),
-        editGender
+        editGender,
+        updatedAdditionalNumbers
       );
       if (res.success) {
         setAlert({ type: 'success', message: 'Customer details updated successfully!' });
@@ -371,7 +571,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
         <button
           onClick={onBack}
           id="btn-details-back"
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-[#6B705C] hover:text-[#2E4F32] hover:bg-gray-100 bg-white border border-gray-200 px-4 py-2.5 rounded-full transition-all cursor-pointer shadow-xs active:scale-95 self-start"
+          className="inline-flex items-center gap-1.5 text-[13px] font-bold text-[#6B705C] hover:text-[#2E4F32] hover:bg-gray-100 bg-white border border-gray-200 px-4 py-2.5 rounded-full transition-all cursor-pointer shadow-xs active:scale-95 dark:bg-[#1a1a15] dark:border-[#8a8a70]/30 dark:text-[#C4C4B5] dark:hover:bg-[#2a2a20] dark:hover:text-[#f5f5f0] self-start"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>BACK TO DIRECTORY</span>
@@ -381,7 +581,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
           <button
             onClick={() => onAddFollowUp(customer.id)}
             id="btn-details-new-followup"
-            className="inline-flex items-center justify-center gap-2 bg-[#8B5CF6]/10 text-[#8B5CF6] hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/25 font-bold text-xs px-4 h-10 rounded-full transition-all cursor-pointer active:scale-95"
+            className="inline-flex items-center justify-center gap-2 bg-[#8B5CF6]/10 text-[#8B5CF6] hover:bg-[#8B5CF6]/20 border border-[#8B5CF6]/25 font-bold text-[13px] px-4 h-10 rounded-full transition-all cursor-pointer active:scale-95 dark:bg-[#8B5CF6]/20 dark:text-[#c084fc] dark:border-[#8B5CF6]/30 dark:hover:bg-[#8B5CF6]/30"
           >
             <CalendarCheck className="w-4 h-4" />
             <span>ADD REMINDER</span>
@@ -390,7 +590,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
           <button
             onClick={() => onAddTicket(customer.id)}
             id="btn-details-new-ticket"
-            className="inline-flex items-center justify-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-xs px-5 h-10 rounded-full shadow-md shadow-[#3B82F6]/10 transition-all cursor-pointer active:scale-95"
+            className="inline-flex items-center justify-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-[13px] px-5 h-10 rounded-full shadow-md shadow-[#3B82F6]/10 transition-all cursor-pointer active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>NEW TICKET</span>
@@ -400,21 +600,21 @@ const CustomerDetails = React.memo(function CustomerDetails({
 
       {/* Action alerts */}
       {alert.type === 'error' && (
-        <div id="details-alert-error" className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-2.5 text-xs text-rose-800 leading-tight">
+        <div id="details-alert-error" className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-2.5 text-[13px] text-rose-800 leading-tight dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-400">
           <AlertCircle className="w-4.5 h-4.5 shrink-0 text-rose-500 mt-0.5" />
           <span className="font-semibold uppercase">{alert.message}</span>
         </div>
       )}
 
       {alert.type === 'success' && (
-        <div id="details-alert-success" className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-start gap-2.5 text-xs text-emerald-800 leading-tight">
+        <div id="details-alert-success" className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-start gap-2.5 text-[13px] text-emerald-800 leading-tight dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-400">
           <CheckCircle className="w-4.5 h-4.5 shrink-0 text-emerald-500 mt-0.5" />
           <span className="font-semibold uppercase">{alert.message}</span>
         </div>
       )}
 
       {alert.type === 'loading' && (
-        <div id="details-alert-loading" className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5 text-xs text-blue-800 leading-tight">
+        <div id="details-alert-loading" className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5 text-[13px] text-blue-800 leading-tight dark:bg-blue-950/20 dark:border-blue-900/30 dark:text-blue-400">
           <Loader2 className="w-4.5 h-4.5 shrink-0 text-blue-500 animate-spin mt-0.5" />
           <span className="font-semibold uppercase">{alert.message}</span>
         </div>
@@ -446,19 +646,59 @@ const CustomerDetails = React.memo(function CustomerDetails({
 
               {/* Mobile */}
               <div className="space-y-1.5">
-                <label htmlFor="edit-mobile-input" className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Mobile Number</label>
-                <input
-                  type="tel"
-                  id="edit-mobile-input"
-                  required
-                  className="w-full text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all font-medium text-[#1F2937]"
-                  value={editMobile}
-                  onChange={(e) => {
-                    setEditMobile(e.target.value);
-                    if (isSameAsMobile) setEditWhatsApp(e.target.value);
-                    if (isImoSameAsMobile) setEditImo(e.target.value);
-                  }}
-                />
+                <div className="flex justify-between items-center h-5 mb-0.5">
+                  <label htmlFor="edit-mobile-input" className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Mobile Number</label>
+                  <button
+                    type="button"
+                    onClick={handleAddEditAdditionalNumberRow}
+                    className="w-5.5 h-5.5 rounded-full bg-accent-green hover:bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition-all shadow-xs shrink-0 cursor-pointer"
+                    title="Add Additional Mobile Number"
+                  >
+                    <Plus className="w-3 h-3 text-white" />
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  <input
+                    type="tel"
+                    id="edit-mobile-input"
+                    required
+                    className="w-full text-xs bg-[#F8FAFC] border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all font-medium text-[#1F2937]"
+                    value={editMobile}
+                    onChange={(e) => {
+                      setEditMobile(e.target.value);
+                      if (isSameAsMobile) setEditWhatsApp(e.target.value);
+                      if (isImoSameAsMobile) setEditImo(e.target.value);
+                    }}
+                  />
+
+                  {editAdditionalNumbers.map((field) => (
+                    <div key={field.id} className="flex items-center gap-2">
+                      <div className="flex-1 flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border border-gray-200 dark:border-[#8a8a70]/30 overflow-hidden focus-within:ring-2 focus-within:ring-[#10B981]/20 focus-within:border-[#10B981] transition-all">
+                        <div className="bg-gray-100 dark:bg-zinc-800 px-3 flex items-center justify-center text-[11px] font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
+                          +880
+                        </div>
+                        <input
+                          type="tel"
+                          pattern="[0-9]*"
+                          inputMode="numeric"
+                          className="w-full text-xs bg-transparent border-none px-3 py-2.5 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
+                          placeholder="17XXXXXXXX"
+                          value={field.suffix}
+                          onChange={(e) => handleEditAdditionalNumberChange(field.id, e.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEditAdditionalNumberRow(field.id)}
+                        className="p-1.5 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg active:scale-95 transition-all shrink-0 cursor-pointer"
+                        title="Remove this number"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* WhatsApp */}
@@ -668,23 +908,23 @@ const CustomerDetails = React.memo(function CustomerDetails({
                 </div>
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                    <h1 className="text-xl font-serif font-bold text-[#1F2937] leading-tight uppercase" id="customer-detail-name">
+                    <h1 className="text-xl font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] leading-tight uppercase" id="customer-detail-name">
                       {customer.name}
                     </h1>
                     <InlineCopy type="name" value={customer.name} className="min-w-[20px] min-h-[20px] p-0" />
                     
-                    <span className="inline-flex items-center gap-1 font-mono text-[9px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md">
+                    <span className="inline-flex items-center gap-1 font-mono text-[13px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md dark:bg-[#1a1a15] dark:border-[#8a8a70]/20 dark:text-[#a0a085]">
                       {customer.id}
                       <InlineCopy type="customerId" value={customer.id} className="min-w-[16px] min-h-[16px] p-0" />
                     </span>
 
                     {customer.customerCategory && (
-                      <span className="inline-flex items-center font-mono text-[9px] font-bold px-2.5 py-0.5 rounded-md border bg-[#5A5A40]/10 text-[#5A5A40] border-[#5A5A40]/20 uppercase tracking-wide" id="profile-badge-category">
+                      <span className="inline-flex items-center font-mono text-[13px] font-bold px-2.5 py-0.5 rounded-md border bg-[#5A5A40]/10 text-[#5A5A40] border-[#5A5A40]/20 dark:bg-[#5A5A40]/20 dark:text-[#c0c090] dark:border-[#5A5A40]/30 uppercase tracking-wide" id="profile-badge-category">
                         {customer.customerCategory}
                       </span>
                     )}
                     {customer.gender && (
-                      <span className={`inline-flex items-center font-mono text-[9px] font-bold px-2.5 py-0.5 rounded-md border uppercase tracking-wide ${
+                      <span className={`inline-flex items-center font-mono text-[13px] font-bold px-2.5 py-0.5 rounded-md border uppercase tracking-wide ${
                         customer.gender.toUpperCase() === 'MALE'
                           ? 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/30'
                           : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/30'
@@ -694,15 +934,15 @@ const CustomerDetails = React.memo(function CustomerDetails({
                     )}
                   </div>
                   
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-center sm:justify-start gap-y-1.5 gap-x-4 text-xs text-gray-500 font-semibold">
-                    <span className="flex items-center justify-center sm:justify-start gap-1 text-[#1F2937]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-center sm:justify-start gap-y-1.5 gap-x-4 text-[13px] text-gray-500 dark:text-[#a0a085] font-semibold">
+                    <span className="flex items-center justify-center sm:justify-start gap-1 text-[#1F2937] dark:text-[#ecece5]">
                       <Phone className="w-3.5 h-3.5 text-[#10B981]" />
-                      <a href={`tel:${customer.mobileNumber}`} className="hover:underline font-bold text-xs" id="customer-detail-mobile">{customer.mobileNumber}</a>
+                      <a href={`tel:${customer.mobileNumber}`} className="hover:underline font-bold text-[13px]" id="customer-detail-mobile">{customer.mobileNumber}</a>
                       <InlineCopy type="mobile" value={customer.mobileNumber} className="min-w-[16px] min-h-[16px] p-0" />
                     </span>
                     <span className="flex items-center justify-center sm:justify-start gap-1">
-                      <span className="text-[10px] uppercase font-bold text-gray-400">LATEST TICKET:</span>
-                      <span className="font-mono font-bold text-gray-700">{latestTicketId || 'NONE'}</span>
+                      <span className="text-[13px] uppercase font-bold text-gray-400 dark:text-[#8a8a70]">LATEST TICKET:</span>
+                      <span className="font-mono font-bold text-gray-700 dark:text-[#ecece5]">{latestTicketId || 'NONE'}</span>
                       {latestTicketId && <InlineCopy type="ticketId" value={latestTicketId} className="min-w-[16px] min-h-[16px] p-0" />}
                     </span>
                     <span className="flex items-center justify-center sm:justify-start gap-1">
@@ -718,6 +958,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
                       whatsAppNumber={customer.whatsAppNumber}
                       imoNumber={customer.imoNumber}
                       customerId={customer.id}
+                      additionalNumbers={customer.additionalNumbers}
                     />
                   </div>
                 </div>
@@ -727,7 +968,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
                 <button
                   onClick={() => setIsEditing(true)}
                   id="btn-edit-customer"
-                  className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-[#10B981] hover:bg-[#059669] text-white font-bold text-xs rounded-full shadow-md shadow-[#10B981]/15 transition-all cursor-pointer active:scale-95"
+                  className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-[#10B981] hover:bg-[#059669] text-white font-bold text-[13px] rounded-full shadow-md shadow-[#10B981]/15 transition-all cursor-pointer active:scale-95"
                   title="Edit Customer Info"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -737,37 +978,37 @@ const CustomerDetails = React.memo(function CustomerDetails({
             </div>
 
             {/* Secondary recruitment data display */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100/60 dark:border-[#8a8a70]/10">
               {/* WhatsApp Quick Link */}
-              <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 block">WhatsApp Chat</span>
+              <div className="p-4 bg-[#F8FAFC] dark:bg-[#151512] rounded-xl border border-gray-100 dark:border-[#8a8a70]/10 space-y-1.5">
+                <span className="text-[13px] uppercase font-bold tracking-wider text-gray-400 dark:text-[#8a8a70] block">WhatsApp Chat</span>
                 {customer.whatsAppNumber ? (
-                  <div className="flex items-center justify-between gap-1 text-xs">
-                    <span className="font-bold text-gray-700">{customer.whatsAppNumber}</span>
+                  <div className="flex items-center justify-between gap-1 text-[13px]">
+                    <span className="font-bold text-gray-700 dark:text-[#ecece5]">{customer.whatsAppNumber}</span>
                     <a 
                       href={getWhatsAppUrl(customer.whatsAppNumber)} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#22C55E] hover:underline font-bold text-[11px]"
+                      className="inline-flex items-center gap-1 text-[#22C55E] hover:underline font-bold text-[13px]"
                     >
                       <span>CONNECT</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
                 ) : (
-                  <span className="text-xs text-gray-400 italic uppercase">Not provided</span>
+                  <span className="text-[13px] text-gray-400 dark:text-[#8a8a70] italic uppercase">Not provided</span>
                 )}
               </div>
 
               {/* IMO Number Card */}
-              <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 block">IMO Number</span>
+              <div className="p-4 bg-[#F8FAFC] dark:bg-[#151512] rounded-xl border border-gray-100 dark:border-[#8a8a70]/10 space-y-1.5">
+                <span className="text-[13px] uppercase font-bold tracking-wider text-gray-400 dark:text-[#8a8a70] block">IMO Number</span>
                 {customer.imoNumber ? (
-                  <div className="flex items-center justify-between gap-1 text-xs">
-                    <span className="font-bold text-gray-700">{customer.imoNumber}</span>
+                  <div className="flex items-center justify-between gap-1 text-[13px]">
+                    <span className="font-bold text-gray-700 dark:text-[#ecece5]">{customer.imoNumber}</span>
                     <button 
                       onClick={handleCopyImo}
-                      className="inline-flex items-center gap-1 text-[#10B981] hover:underline font-bold text-[11px] cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[#10B981] hover:underline font-bold text-[13px] cursor-pointer"
                     >
                       {copiedImo ? (
                         <>
@@ -783,26 +1024,26 @@ const CustomerDetails = React.memo(function CustomerDetails({
                     </button>
                   </div>
                 ) : (
-                  <span className="text-xs text-gray-400 italic uppercase">Not provided</span>
+                  <span className="text-[13px] text-gray-400 dark:text-[#8a8a70] italic uppercase">Not provided</span>
                 )}
               </div>
             </div>
 
             {/* Display Customer Category, Gender and Address if present */}
             {(customer.customerCategory || customer.gender || customer.address) && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100/60 dark:border-[#8a8a70]/10">
                 {customer.customerCategory && (
-                  <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-[#5A5A40] block">Customer Category</span>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#5A5A40]/10 text-[#5A5A40] border border-[#5A5A40]/20 uppercase">
+                  <div className="p-4 bg-[#F8FAFC] dark:bg-[#151512] rounded-xl border border-gray-100 dark:border-[#8a8a70]/10 space-y-1.5">
+                    <span className="text-[13px] uppercase font-bold tracking-wider text-[#5A5A40] dark:text-[#c0c090] block">Customer Category</span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[13px] font-bold bg-[#5A5A40]/10 text-[#5A5A40] border border-[#5A5A40]/20 dark:bg-[#5A5A40]/20 dark:text-[#c0c090] dark:border-[#5A5A40]/30 uppercase">
                       {customer.customerCategory}
                     </span>
                   </div>
                 )}
                 {customer.gender && (
-                  <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 block">Gender</span>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border uppercase ${
+                  <div className="p-4 bg-[#F8FAFC] dark:bg-[#151512] rounded-xl border border-gray-100 dark:border-[#8a8a70]/10 space-y-1.5">
+                    <span className="text-[13px] uppercase font-bold tracking-wider text-gray-400 dark:text-[#8a8a70] block">Gender</span>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[13px] font-bold border uppercase ${
                       customer.gender.toUpperCase() === 'MALE'
                         ? 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/30'
                         : 'bg-[#FDF2F8] dark:bg-[#500e2e]/20 text-[#D01C6D] dark:text-[#F472B6] border-[#FBCFE8] dark:border-[#9D174D]/30'
@@ -812,9 +1053,9 @@ const CustomerDetails = React.memo(function CustomerDetails({
                   </div>
                 )}
                 {customer.address && (
-                  <div className="p-4 bg-[#F8FAFC] rounded-xl border border-gray-100 space-y-1.5 sm:col-span-1">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 block">Address</span>
-                    <span className="text-xs font-medium text-gray-700 whitespace-pre-wrap uppercase leading-relaxed block">
+                  <div className="p-4 bg-[#F8FAFC] dark:bg-[#151512] rounded-xl border border-gray-100 dark:border-[#8a8a70]/10 space-y-1.5 sm:col-span-1">
+                    <span className="text-[13px] uppercase font-bold tracking-wider text-gray-400 dark:text-[#8a8a70] block">Address</span>
+                    <span className="text-[13px] font-medium text-gray-700 dark:text-[#ecece5] whitespace-pre-wrap uppercase leading-relaxed block">
                       {customer.address}
                     </span>
                   </div>
@@ -822,15 +1063,17 @@ const CustomerDetails = React.memo(function CustomerDetails({
               </div>
             )}
 
+
+
             {/* Case Remarks Section with Inline Auto-Save */}
-            <div className="p-5 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-2.5">
+            <div className="p-5 bg-emerald-50/30 dark:bg-[#1b3a24]/10 rounded-2xl border border-emerald-100 dark:border-[#10b981]/20 space-y-2.5">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 uppercase">
+                <div className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-800 dark:text-emerald-400 uppercase">
                   <AlignLeft className="w-4 h-4" />
                   <span>Remarks & Case Notes</span>
                 </div>
                 {/* Save Status Indicators */}
-                <span className="text-[9px] font-bold uppercase tracking-wider">
+                <span className="text-[13px] font-bold uppercase tracking-wider">
                   {remarksSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
                   {remarksSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
                   {remarksSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
@@ -838,7 +1081,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
                 </span>
               </div>
               <textarea
-                className="w-full text-xs bg-white border border-gray-200 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all text-[#1F2937] resize-none font-sans leading-relaxed"
+                className="w-full text-[13px] bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/20 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all text-[#1F2937] dark:text-[#f5f5f0] resize-none font-sans leading-relaxed"
                 rows={3}
                 placeholder="TYPE BACKGROUND DETAILS AND CASE NOTES HERE. AUTOSAVES AS YOU TYPE..."
                 value={remarksInput}
@@ -850,153 +1093,278 @@ const CustomerDetails = React.memo(function CustomerDetails({
 
       </div>
 
-      {/* Dual Tabs layout: Tickets History & Scheduled Follow-ups */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* Left Column: Scheduled Follow-up history */}
-        <div className="space-y-4" id="customer-followups-panel">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-4 bg-[#8B5CF6] rounded" />
-              <h3 className="font-serif font-bold text-[#1F2937] text-xs uppercase tracking-tight flex items-center gap-1.5">
-                <CalendarCheck className="w-4.5 h-4.5" />
-                <span>Follow-up History</span>
-              </h3>
-            </div>
-            <span className="text-[9px] font-bold text-[#8B5CF6] bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 px-2.5 py-1 rounded-full uppercase">
-              {customerFollowUps.length} REMINDERS
-            </span>
-          </div>
+      {/* Three Sub-Tabs Switcher */}
+      <div className="flex border-b border-gray-200 dark:border-[#8a8a70]/20 mb-6">
+        <button
+          onClick={() => setActiveSubTab('timeline')}
+          className={`flex-1 pb-3 text-xs font-bold uppercase tracking-wider border-b-2 text-center transition-all cursor-pointer ${
+            activeSubTab === 'timeline'
+              ? 'border-[#10B981] text-[#10B981]'
+              : 'border-transparent text-gray-400 hover:text-gray-600 dark:text-[#8a8a70] dark:hover:text-[#ecece5]'
+          }`}
+        >
+          🕒 Activity Timeline ({getCustomerTimeline(customer.id, customer, tickets, followUps).length})
+        </button>
+        <button
+          onClick={() => setActiveSubTab('tickets')}
+          className={`flex-1 pb-3 text-xs font-bold uppercase tracking-wider border-b-2 text-center transition-all cursor-pointer ${
+            activeSubTab === 'tickets'
+              ? 'border-[#3B82F6] text-[#3B82F6]'
+              : 'border-transparent text-gray-400 hover:text-gray-600 dark:text-[#8a8a70] dark:hover:text-[#ecece5]'
+          }`}
+        >
+          🎫 Ticket Logs ({customerTickets.length})
+        </button>
+        <button
+          onClick={() => setActiveSubTab('followups')}
+          className={`flex-1 pb-3 text-xs font-bold uppercase tracking-wider border-b-2 text-center transition-all cursor-pointer ${
+            activeSubTab === 'followups'
+              ? 'border-[#8B5CF6] text-[#8B5CF6]'
+              : 'border-transparent text-gray-400 hover:text-gray-600 dark:text-[#8a8a70] dark:hover:text-[#ecece5]'
+          }`}
+        >
+          📅 Follow-up History ({customerFollowUps.length})
+        </button>
+      </div>
 
-          <div className="space-y-3 max-h-[420px] overflow-y-auto">
-            {customerFollowUps.length > 0 ? (
-              customerFollowUps.map(f => {
-                const todayStr = new Date().toISOString().split('T')[0];
-                const overdue = f.status === 'Pending' && f.followUpDate < todayStr;
-                let statusBadgeStyle = '';
-                if (f.status === 'Completed') {
-                  statusBadgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                } else if (overdue) {
-                  statusBadgeStyle = 'bg-rose-50 text-rose-700 border-rose-200 font-bold';
-                } else {
-                  statusBadgeStyle = 'bg-amber-50 text-amber-700 border-amber-200';
-                }
-
-                return (
-                  <div 
-                    key={f.id}
-                    className={`p-4 rounded-xl border text-xs space-y-2 bg-white ${
-                      f.status === 'Completed' 
-                        ? 'border-gray-200 opacity-80' 
-                        : overdue
-                          ? 'border-rose-300'
-                          : 'border-amber-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-[10px] font-mono font-bold">
-                      <span className="text-gray-400">{f.id}</span>
-                      <span className={`px-2 py-0.5 rounded-full border uppercase ${statusBadgeStyle}`}>
-                        {overdue ? 'OVERDUE: ' : ''}{getRelativeDateLabel(f.followUpDate)} @ {f.followUpTime}
-                      </span>
-                    </div>
-                    <p className="italic text-gray-700 font-sans uppercase">
-                      "{f.notes}"
-                    </p>
-                    <div className="flex justify-between items-center text-[9px] text-gray-400 font-bold uppercase pt-2 border-t border-gray-100">
-                      <span>Status: {f.status}</span>
-                      <span>Created: {new Date(f.createdAt || '').toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="p-8 bg-white border border-gray-200 rounded-[20px] text-center text-xs space-y-3 shadow-xs">
-                <div className="text-3xl">📅</div>
-                <h4 className="font-serif font-bold text-[#1F2937] text-xs uppercase">NO REMINDERS</h4>
-                <p className="text-[10px] text-gray-400 font-semibold uppercase">Schedule followups or reminders to never miss call back.</p>
+      {/* Tab Panels */}
+      <div className="bg-white dark:bg-[#20201a] p-6 rounded-[24px] border border-gray-200 dark:border-[#8a8a70]/20 shadow-md">
+        {/* 🕒 Activity Timeline Tab */}
+        {activeSubTab === 'timeline' && (
+          <div className="space-y-6" id="customer-timeline-panel">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-4 bg-[#10B981] rounded" />
+                <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[16px] uppercase tracking-tight flex items-center gap-1.5">
+                  <span>Customer Activity History</span>
+                </h3>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column: Ticket Logs / History Section */}
-        <div className="space-y-4" id="ticket-history-section">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-4 bg-[#3B82F6] rounded" />
-              <h2 className="font-serif font-bold text-[#1F2937] text-xs uppercase tracking-tight flex items-center gap-1.5">
-                <History className="w-4 h-4" />
-                <span>Support Tickets Log</span>
-              </h2>
+              <span className="text-[13px] font-bold text-[#10B981] bg-[#10B981]/10 border border-[#10B981]/25 px-2.5 py-1 rounded-full uppercase dark:bg-[#10B981]/20 dark:text-[#a7f3d0] dark:border-[#10B981]/30">
+                {getCustomerTimeline(customer.id, customer, tickets, followUps).length} EVENTS
+              </span>
             </div>
-            
-            {/* Simple Dropdown Filter */}
-            <select
-              className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-600 focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-            >
-              <option value="All">ALL STATUS</option>
-              <option value="Open">OPEN</option>
-              <option value="Pending">PENDING</option>
-              <option value="Closed">CLOSED</option>
-            </select>
+
+            <div className="relative border-l-2 border-gray-100 dark:border-[#8a8a70]/10 pl-6 ml-3 space-y-6 max-h-[500px] overflow-y-auto pr-2">
+              {getCustomerTimeline(customer.id, customer, tickets, followUps).length > 0 ? (
+                getCustomerTimeline(customer.id, customer, tickets, followUps).map((item, idx) => {
+                  let icon = '📝';
+                  let iconBg = 'bg-gray-100 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400';
+                  const act = item.activity.toLowerCase();
+                  
+                  if (act.includes('create') || act.includes('onboard') || item.type === 'CREATED') {
+                    icon = '✨';
+                    iconBg = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400';
+                  } else if (act.includes('ticket') || item.type === 'TICKET_CREATED' || item.type === 'TICKET_CLOSED') {
+                    if (act.includes('closed') || act.includes('close') || item.type === 'TICKET_CLOSED') {
+                      icon = '✅';
+                      iconBg = 'bg-rose-50 text-rose-600 dark:bg-rose-950/20 dark:text-rose-400';
+                    } else {
+                      icon = '🎫';
+                      iconBg = 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400';
+                    }
+                  } else if (act.includes('follow-up') || act.includes('followup') || item.type === 'FOLLOWUP_ADDED' || item.type === 'FOLLOWUP_COMPLETED') {
+                    if (act.includes('completed') || item.type === 'FOLLOWUP_COMPLETED') {
+                      icon = '✓';
+                      iconBg = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400';
+                    } else {
+                      icon = '📅';
+                      iconBg = 'bg-purple-50 text-purple-600 dark:bg-purple-950/20 dark:text-purple-400';
+                    }
+                  } else if (act.includes('call') || item.type === 'CALL_LOGGED') {
+                    icon = '📞';
+                    iconBg = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400/80';
+                  } else if (act.includes('whatsapp') || item.type === 'WHATSAPP_CONTACTED') {
+                    icon = '💬';
+                    iconBg = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400/80';
+                  } else if (act.includes('imo') || item.type === 'IMO_CONTACTED') {
+                    icon = '🔵';
+                    iconBg = 'bg-sky-50 text-sky-600 dark:bg-sky-950/20 dark:text-sky-400/80';
+                  } else if (act.includes('update') || item.type === 'UPDATED') {
+                    icon = '✏️';
+                    iconBg = 'bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400';
+                  }
+
+                  const dateObj = new Date(item.timestamp);
+                  const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const dateStr = dateObj.toISOString().split('T')[0];
+                  const typeLabel = item.type.replace('_', ' ');
+
+                  return (
+                    <div key={item.id || idx} className="relative group">
+                      <span className="absolute -left-[31px] top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-white dark:bg-[#1a1a15] ring-2 ring-gray-200 dark:ring-zinc-800 group-hover:scale-110 transition-transform">
+                        <span className="h-2 w-2 rounded-full bg-[#10B981]" />
+                      </span>
+
+                      <div className="bg-white dark:bg-[#1a1a15] p-4 rounded-xl border border-gray-100 dark:border-[#8a8a70]/10 shadow-xs hover:shadow-md transition-all duration-150 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] ${iconBg}`}>{icon} {typeLabel}</span>
+                            <span className="text-gray-400 dark:text-[#8a8a70] font-mono text-[11px]">BY {item.user}</span>
+                          </div>
+                          <span className="text-gray-400 dark:text-[#8a8a70] font-semibold uppercase">{getRelativeDateLabel(dateStr)} @ {timeStr}</span>
+                        </div>
+                        <p className="text-[13px] text-gray-700 dark:text-[#ecece5] break-words uppercase font-medium leading-relaxed">
+                          {item.activity}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/20 rounded-[20px] text-center text-[13px] space-y-3 shadow-xs">
+                  <div className="text-3xl">🕒</div>
+                  <h4 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[13px] uppercase">NO ACTIVITY LOGS</h4>
+                  <p className="text-[13px] text-gray-400 dark:text-[#8a8a70] font-semibold uppercase">History logs will show up here as interaction occurs.</p>
+                </div>
+              )}
+            </div>
           </div>
+        )}
 
-          {/* Ticket List */}
-          <div className="space-y-3 max-h-[420px] overflow-y-auto" id="customer-ticket-logs">
-            {customerTickets.length > 0 ? (
-              customerTickets.map((ticket) => {
-                // Status Styling
-                let badgeColor = '';
-                let statusIcon = null;
-                if (ticket.status === 'Open') {
-                  badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                  statusIcon = <Clock className="w-3.5 h-3.5" />;
-                } else if (ticket.status === 'Closed') {
-                  badgeColor = 'bg-rose-50 text-rose-700 border-rose-200';
-                  statusIcon = <CheckCircle className="w-3.5 h-3.5" />;
-                } else {
-                  badgeColor = 'bg-blue-50 text-blue-700 border-blue-200';
-                  statusIcon = <Clock className="w-3.5 h-3.5" />;
-                }
-
-                return (
-                  <div
-                    key={ticket.id}
-                    id={`ticket-card-${ticket.id}`}
-                    className="bg-white p-4 rounded-xl border border-gray-200 space-y-2.5 text-xs shadow-xs"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[9px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded-md">
-                        {ticket.id}
-                      </span>
-                      <span className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${badgeColor}`}>
-                        {statusIcon}
-                        {ticket.status}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-gray-700 leading-relaxed break-words whitespace-pre-wrap font-sans uppercase">
-                      {ticket.conversationDescription}
-                    </p>
-
-                    <div className="pt-2 border-t border-gray-100 text-[9px] font-bold text-gray-400 uppercase">
-                      Opened: {formatDateTime(ticket.createdAt)}
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="p-8 bg-white border border-gray-200 rounded-[20px] text-center text-xs space-y-3 shadow-xs" id="no-tickets-fallback">
-                <div className="text-3xl">🎫</div>
-                <h4 className="font-serif font-bold text-[#1F2937] text-xs uppercase">NO TICKETS AVAILABLE</h4>
-                <p className="text-[10px] text-gray-400 font-semibold uppercase">Open a ticket if support requests are submitted.</p>
+        {/* 🎫 Tickets History Tab */}
+        {activeSubTab === 'tickets' && (
+          <div className="space-y-4" id="ticket-history-section">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-4 bg-[#3B82F6] rounded" />
+                <h2 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[16px] uppercase tracking-tight flex items-center gap-1.5">
+                  <History className="w-4 h-4" />
+                  <span>Support Tickets Log</span>
+                </h2>
               </div>
-            )}
-          </div>
-        </div>
+              
+              <select
+                className="text-[13px] font-bold bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/30 rounded-lg px-2 py-1 text-gray-600 dark:text-[#C4C4B5] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+              >
+                <option value="All">ALL STATUS</option>
+                <option value="Open">OPEN</option>
+                <option value="Pending">PENDING</option>
+                <option value="Closed">CLOSED</option>
+              </select>
+            </div>
 
+            <div className="space-y-3 max-h-[420px] overflow-y-auto" id="customer-ticket-logs">
+              {customerTickets.length > 0 ? (
+                customerTickets.map((ticket) => {
+                  let badgeColor = '';
+                  let statusIcon = null;
+                  if (ticket.status === 'Open') {
+                    badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
+                    statusIcon = <Clock className="w-3.5 h-3.5" />;
+                  } else if (ticket.status === 'Closed') {
+                    badgeColor = 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
+                    statusIcon = <CheckCircle className="w-3.5 h-3.5" />;
+                  } else {
+                    badgeColor = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30';
+                    statusIcon = <Clock className="w-3.5 h-3.5" />;
+                  }
+
+                  return (
+                    <div
+                      key={ticket.id}
+                      id={`ticket-card-${ticket.id}`}
+                      className="bg-white dark:bg-[#1a1a15] p-4 rounded-xl border border-gray-200 dark:border-[#8a8a70]/20 space-y-2.5 text-[13px] shadow-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[13px] font-bold text-gray-500 dark:text-[#a0a085] bg-gray-100 dark:bg-[#151512] border border-gray-200 dark:border-[#8a8a70]/10 px-1.5 py-0.5 rounded-md">
+                          {ticket.id}
+                        </span>
+                        <span className={`text-[13px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${badgeColor}`}>
+                          {statusIcon}
+                          {ticket.status}
+                        </span>
+                      </div>
+
+                      <p className="text-[13px] text-gray-700 dark:text-[#ecece5] leading-relaxed break-words whitespace-pre-wrap font-sans uppercase">
+                        {ticket.conversationDescription}
+                      </p>
+
+                      <div className="pt-2 border-t border-gray-100 dark:border-[#8a8a70]/10 text-[13px] font-bold text-gray-400 dark:text-[#8a8a70] uppercase">
+                        Opened: {formatDateTime(ticket.createdAt)}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/20 rounded-[20px] text-center text-[13px] space-y-3 shadow-xs" id="no-tickets-fallback">
+                  <div className="text-3xl">🎫</div>
+                  <h4 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[13px] uppercase">NO TICKETS AVAILABLE</h4>
+                  <p className="text-[13px] text-gray-400 dark:text-[#8a8a70] font-semibold uppercase">Open a ticket if support requests are submitted.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 📅 Scheduled Follow-up Tab */}
+        {activeSubTab === 'followups' && (
+          <div className="space-y-4" id="customer-followups-panel">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-4 bg-[#8B5CF6] rounded" />
+                <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[16px] uppercase tracking-tight flex items-center gap-1.5">
+                  <CalendarCheck className="w-4.5 h-4.5" />
+                  <span>Follow-up History</span>
+                </h3>
+              </div>
+              <span className="text-[13px] font-bold text-[#8B5CF6] bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 px-2.5 py-1 rounded-full uppercase dark:bg-[#8B5CF6]/20 dark:text-[#c084fc] dark:border-[#8B5CF6]/30">
+                {customerFollowUps.length} REMINDERS
+              </span>
+            </div>
+
+            <div className="space-y-3 max-h-[420px] overflow-y-auto">
+              {customerFollowUps.length > 0 ? (
+                customerFollowUps.map(f => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const overdue = f.status === 'Pending' && f.followUpDate < todayStr;
+                  let statusBadgeStyle = '';
+                  if (f.status === 'Completed') {
+                    statusBadgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
+                  } else if (overdue) {
+                    statusBadgeStyle = 'bg-rose-50 text-rose-700 border-rose-200 font-bold dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
+                  } else {
+                    statusBadgeStyle = 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
+                  }
+
+                  return (
+                    <div 
+                      key={f.id}
+                      className={`p-4 rounded-xl border text-[13px] space-y-2 bg-white dark:bg-[#1a1a15] ${
+                        f.status === 'Completed' 
+                          ? 'border-gray-200 dark:border-[#8a8a70]/20 opacity-80' 
+                          : overdue
+                            ? 'border-rose-300 dark:border-rose-800'
+                            : 'border-amber-200 dark:border-amber-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[13px] font-mono font-bold">
+                        <span className="text-gray-400 dark:text-[#8a8a70]">{f.id}</span>
+                        <span className={`px-2 py-0.5 rounded-full border uppercase ${statusBadgeStyle}`}>
+                          {overdue ? 'OVERDUE: ' : ''}{getRelativeDateLabel(f.followUpDate)} @ {f.followUpTime}
+                        </span>
+                      </div>
+                      <p className="italic text-gray-700 dark:text-[#ecece5] font-sans uppercase">
+                        "{f.notes}"
+                      </p>
+                      <div className="flex justify-between items-center text-[13px] text-gray-400 dark:text-[#8a8a70] font-bold uppercase pt-2 border-t border-gray-100 dark:border-[#8a8a70]/10">
+                        <span>Status: {f.status}</span>
+                        <span>Created: {new Date(f.createdAt || '').toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/20 rounded-[20px] text-center text-[13px] space-y-3 shadow-xs">
+                  <div className="text-3xl">📅</div>
+                  <h4 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[13px] uppercase">NO REMINDERS</h4>
+                  <p className="text-[13px] text-gray-400 dark:text-[#8a8a70] font-semibold uppercase">Schedule followups or reminders to never miss call back.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

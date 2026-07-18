@@ -32,9 +32,16 @@ html, body, #root, input, textarea, select, button, option, dialog, span, div, p
   text-transform: uppercase;
 }
 
-/* Ensure placeholder text is also UPPERCASE */
+/* Ensure placeholder text is also UPPERCASE and high-contrast */
 ::placeholder, [placeholder] {
   text-transform: uppercase !important;
+  color: #4B5563 !important;
+  opacity: 1 !important;
+  font-size: var(--font-size-input-placeholder, 15px) !important;
+}
+.dark ::placeholder, .dark [placeholder] {
+  color: #9CA3AF !important;
+  opacity: 1 !important;
 }
 
 /* Force standard font weights: normal/medium -> 500, bold/semi-bold -> 600 */
@@ -58,6 +65,454 @@ button, .button, [role="button"] {
   font-weight: 500 !important;
   min-height: 44px; /* Touch target minimum height */
 }
+
+/* ============================================================================
+   GLOBAL TYPOGRAPHY & ENTERPRISE RESPONSIVE SCALE SYSTEM
+   ============================================================================ */
+
+:root {
+  /* Logo */
+  --font-size-logo: 18px;
+  
+  /* Page Title (Responsive Scale) */
+  --font-size-page-title: 22px; /* Default/Mobile */
+  
+  /* Section Title */
+  --font-size-section-title: 20px;
+  
+  /* Card Title */
+  --font-size-card-title: 15px;
+  
+  /* Body Text */
+  --font-size-body-text: 16px;
+  
+  /* Button Text */
+  --font-size-button-text: 14px;
+  
+  /* Input Label */
+  --font-size-input-label: 14px;
+  
+  /* Input Placeholder */
+  --font-size-input-placeholder: 15px;
+  
+  /* Small Label */
+  --font-size-small-label: 13px;
+  
+  /* Caption */
+  --font-size-caption: 12px;
+  
+  /* Badge Text */
+  --font-size-badge-text: 12px;
+  
+  /* Statistics Number */
+  --font-size-statistics-number: 32px;
+  
+  /* Card Number */
+  --font-size-card-number: 30px;
+  
+  /* Bottom Navigation Label */
+  --font-size-bottom-navigation-label: 13px;
+  
+  /* Dropdown, Table Header & Table Content */
+  --font-size-dropdown: 14px;
+  --font-size-table-header: 14px;
+  --font-size-table-content: 14px;
+}
+
+/* AUTOMATIC ENTERPRISE RESPONSIVE SCALING BASED ON SCREEN WIDTH */
+
+/* Mobile Proportions (320px, 360px, 375px, 390px, 412px, 430px) */
+@media (min-width: 320px) {
+  :root {
+    --font-size-page-title: 22px;
+    --font-size-badge-text: 12px;
+  }
+}
+@media (min-width: 360px) {
+  :root {
+    --font-size-page-title: 22px;
+    --font-size-badge-text: 12px;
+  }
+}
+@media (min-width: 375px) {
+  :root {
+    --font-size-page-title: 22px;
+    --font-size-badge-text: 12px;
+  }
+}
+@media (min-width: 390px) {
+  :root {
+    --font-size-page-title: 22px;
+    --font-size-badge-text: 12px;
+  }
+}
+@media (min-width: 412px) {
+  :root {
+    --font-size-page-title: 22px;
+    --font-size-badge-text: 12.5px;
+  }
+}
+@media (min-width: 430px) {
+  :root {
+    --font-size-page-title: 23px;
+    --font-size-badge-text: 12.5px;
+  }
+}
+
+/* Tablet Proportions (768px) */
+@media (min-width: 768px) {
+  :root {
+    --font-size-page-title: 24px;
+    --font-size-badge-text: 13px;
+  }
+}
+
+/* Desktop Proportions (1024px, 1440px) */
+@media (min-width: 1024px) {
+  :root {
+    --font-size-page-title: 28px;
+    --font-size-badge-text: 13px;
+  }
+}
+
+/* 1. Logo */
+.crm-logo,
+header [title="MoveAboard CRM Logo"] h1,
+header h1.text-primary-olive {
+  font-size: var(--font-size-logo) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.2 !important;
+}
+
+/* 2. Page Title */
+.crm-page-title,
+.page-title,
+#dashboard-view-panel h2:first-of-type,
+#customers-view-panel h2:first-of-type,
+#tickets-manager-container h2:first-of-type,
+#follow-ups-container h2:first-of-type,
+#settings-panel-container h2:first-of-type,
+#user-management-container h2:first-of-type,
+#admin-debug-container h2:first-of-type,
+main h1:not(.logo-text),
+h1.page-title,
+h2.page-title {
+  font-size: var(--font-size-page-title) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.25 !important;
+}
+
+/* 3. Section Title */
+.crm-section-title,
+.section-title,
+main h2,
+main h3,
+#customer-category-statistics-section h3,
+#quick-actions-section h3,
+#recent-activities-section h3,
+#tickets-manager-container h3,
+#follow-ups-container h3,
+#settings-panel-container h3 {
+  font-size: var(--font-size-section-title) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.015em !important;
+  line-height: 1.3 !important;
+}
+
+/* 4. Card Title */
+.crm-card-title,
+.card-title,
+main h4,
+.card h3,
+.card h4 {
+  font-size: var(--font-size-card-title) !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.4 !important;
+}
+
+/* 5. Body Text */
+.crm-body-text,
+body,
+p,
+.text-base,
+.lead {
+  font-size: var(--font-size-body-text) !important;
+  font-weight: 500 !important; /* Maps comfortable font-weight (400-500) */
+  line-height: 1.6 !important;
+  letter-spacing: 0.005em !important;
+}
+
+/* 6. Button Text */
+.crm-button-text,
+button,
+.button,
+[role="button"],
+input[type="submit"] {
+  font-size: var(--font-size-button-text) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+}
+
+/* 7. Input Label */
+.crm-input-label,
+label,
+.input-label {
+  font-size: var(--font-size-input-label) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.01em !important;
+}
+
+/* 8. Input Placeholder */
+.crm-input-placeholder,
+::placeholder,
+[placeholder] {
+  font-size: var(--font-size-input-placeholder) !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* 9. Small Label (Never render important text below 13px) */
+.crm-small-label,
+.small-label,
+.text-xs,
+[class*="text-xs"],
+.text-\[8px\], 
+.text-\[9px\], 
+.text-\[10px\], 
+.text-\[11px\], 
+.text-\[12px\],
+[class*="text-[8px]"],
+[class*="text-[9px]"],
+[class*="text-[10px]"] {
+  font-size: var(--font-size-small-label) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.015em !important;
+}
+
+/* 10. Caption */
+.crm-caption,
+.caption,
+figcaption {
+  font-size: var(--font-size-caption) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* 11. Badge Text */
+.crm-badge-text,
+.badge,
+[data-badge],
+span[class*="bg-"] {
+  font-size: var(--font-size-badge-text) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  line-height: 1 !important;
+}
+
+/* 12. Statistics Number */
+.crm-statistics-number,
+.stat-number,
+.text-3xl,
+[class*="text-3xl"] {
+  font-size: var(--font-size-statistics-number) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.1 !important;
+}
+
+/* 13. Card Number */
+.crm-card-number,
+.card-number,
+.text-4xl,
+[class*="text-4xl"] {
+  font-size: var(--font-size-card-number) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.1 !important;
+}
+
+/* 14. Bottom Navigation Label */
+.crm-bottom-navigation-label,
+nav.fixed button span {
+  font-size: var(--font-size-bottom-navigation-label) !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* 15. Dropdown Text */
+.crm-dropdown-text,
+select,
+option,
+[role="listbox"],
+[role="option"] {
+  font-size: var(--font-size-dropdown) !important;
+  font-weight: 500 !important;
+}
+
+/* 16. Table Header */
+.crm-table-header,
+th {
+  font-size: var(--font-size-table-header) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* 17. Table Content */
+.crm-table-content,
+td {
+  font-size: var(--font-size-table-content) !important;
+  font-weight: 500 !important;
+}
+
+/* Ensure inputs, selects and textareas have a comfortable touch area */
+input, select, textarea {
+  min-height: 44px !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+
+/* ============================================================================
+   TEXT CONTRAST & ACCESSIBILITY UPGRADES
+   ============================================================================ */
+
+/* Light gray text overrides (increased contrast) */
+.text-gray-400, .text-zinc-400, .text-slate-400, .text-neutral-400 {
+  color: #374151 !important; /* High-contrast gray */
+}
+.dark .text-gray-400, .dark .text-zinc-400, .dark .text-slate-400, .dark .text-neutral-400 {
+  color: #D1D5DB !important;
+}
+
+.text-gray-500, .text-zinc-500, .text-slate-500, .text-neutral-500, .text-crm-text-muted {
+  color: #1F2937 !important; /* Dark Charcoal */
+}
+.dark .text-gray-500, .dark .text-zinc-500, .dark .text-slate-500, .dark .text-neutral-500, .dark .text-crm-text-muted {
+  color: #E5E7EB !important;
+}
+
+/* Enhance text opacity classes */
+.text-opacity-50, .bg-opacity-50, .text-white\/60, .text-white\/70, .text-black\/60 {
+  color: inherit !important;
+}
+
+/* Bottom bar navigation elements - unselected state contrast */
+.text-\[\#2c2c26\]\/50 {
+  color: #4B5563 !important;
+}
+.dark .text-\[\#2c2c26\]\/50 {
+  color: #E5E7EB !important;
+}
+
+
+/* ============================================================================
+   STATUS BADGES - SOLID HIGH CONTRAST COLORS
+   ============================================================================ */
+span[class*="bg-primary-olive/10"] {
+  background-color: #6B705C !important;
+  color: #FFFFFF !important;
+  border-color: #5A5E4E !important;
+}
+span[class*="bg-secondary-slate/10"] {
+  background-color: #34495E !important;
+  color: #FFFFFF !important;
+  border-color: #2C3E50 !important;
+}
+span[class*="bg-accent-blue/10"] {
+  background-color: #1D4ED8 !important;
+  color: #FFFFFF !important;
+  border-color: #172554 !important;
+}
+span[class*="bg-accent-green/10"] {
+  background-color: #15803D !important;
+  color: #FFFFFF !important;
+  border-color: #14532D !important;
+}
+span[class*="bg-accent-orange/10"] {
+  background-color: #B45309 !important;
+  color: #FFFFFF !important;
+  border-color: #78350F !important;
+}
+span[class*="bg-accent-red/10"] {
+  background-color: #B91C1C !important;
+  color: #FFFFFF !important;
+  border-color: #7F1D1D !important;
+}
+span[class*="bg-accent-purple/10"] {
+  background-color: #6D28D9 !important;
+  color: #FFFFFF !important;
+  border-color: #4C1D95 !important;
+}
+
+
+/* ============================================================================
+   HEADER, STICKY ELEMENTS & SAFE AREAS
+   ============================================================================ */
+
+/* Reduced header shadow and proper blur */
+header.sticky {
+  position: sticky !important;
+  top: 0 !important;
+  backdrop-filter: blur(12px) !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  z-index: 40 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+.dark header.sticky {
+  background-color: rgba(32, 32, 26, 0.95) !important;
+}
+
+/* Ensure the layout has safe area padding and never hides behind sticky elements */
+body {
+  padding-top: env(safe-area-inset-top, 0px) !important;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px) !important; /* Bottom bar padding */
+}
+
+main {
+  margin-top: 12px !important;
+}
+
+
+/* ============================================================================
+   RESPONSIVE TABLES & CARDS SPACING
+   ============================================================================ */
+
+/* Force all tables to scroll horizontally on mobile and use generous layout spacing */
+table {
+  display: block !important;
+  width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  border-collapse: separate !important;
+  border-spacing: 0 10px !important;
+}
+
+th, td {
+  padding: 14px 18px !important; /* Improved column spacing */
+  white-space: nowrap !important;
+}
+
+tr {
+  background-color: var(--color-crm-card) !important;
+}
+
+/* Card spacing improvement */
+.card, [class*="Card"] {
+  gap: 1.5rem !important;
+}
+
+/* Form group rows spacing */
+form .space-y-4 > * + * {
+  margin-top: 1.5rem !important;
+}
+
+
+/* ============================================================================
+   SHIMMER, RIPPLE & HELPER CLASSES
+   ============================================================================ */
 
 /* Shimmer Animation for Skeleton Loaders */
 @keyframes shimmer {
@@ -99,3 +554,279 @@ button, .button, [role="button"] {
 .dark .highlight-accent {
   color: #F8FAFC !important;
 }
+
+/* ============================================================================
+   ENTERPRISE ULTRA-POLISHED DARK MODE SYSTEM
+   ============================================================================ */
+
+.dark,
+.dark body,
+.dark #root {
+  background-color: #11110E !important;
+  color: #F1F1EB !important;
+}
+
+/* Redefine Theme Variables for Native CSS Support */
+.dark {
+  --color-crm-bg: #11110E;
+  --color-crm-card: #1A1A16;
+  --color-crm-border: #2D2D24;
+  --color-crm-text: #F1F1EB;
+  --color-crm-text-muted: #959585;
+  --color-primary-olive: #A3A895;
+  --color-primary-olive-dark: #BDC2B0;
+}
+
+/* Headers and Navigation */
+.dark header,
+.dark header.sticky,
+.dark .sticky {
+  background-color: rgba(17, 17, 14, 0.95) !important;
+  border-color: #2D2D24 !important;
+}
+
+.dark nav,
+.dark footer,
+.dark .fixed {
+  border-color: #2D2D24 !important;
+}
+
+/* Bottom Tab Bar in Dark Mode */
+.dark nav.fixed {
+  background-color: #161612 !important;
+}
+
+.dark nav.fixed button {
+  color: #A3A393 !important;
+}
+
+.dark nav.fixed button[class*="text-[#5A5A40]"],
+.dark nav.fixed button[class*="bg-[#5A5A40]/10"] {
+  background-color: rgba(90, 90, 64, 0.3) !important;
+  color: #F1F1EB !important;
+}
+
+/* Cards, Modals, Popovers, and Dropdowns */
+.dark .bg-white,
+.dark [class*="bg-white"],
+.dark .bg-crm-card,
+.dark .bg-slate-50,
+.dark .bg-gray-50,
+.dark .bg-zinc-50,
+.dark .bg-neutral-50,
+.dark .bg-slate-100/50,
+.dark [class*="bg-slate-"],
+.dark [class*="bg-gray-"],
+.dark [class*="bg-zinc-"],
+.dark [class*="bg-neutral-"] {
+  background-color: #1A1A16 !important;
+  color: #F1F1EB !important;
+}
+
+/* Keep subtle utility gray-100 bg as slightly lighter dark block */
+.dark .bg-gray-100,
+.dark .bg-zinc-100,
+.dark .bg-slate-100,
+.dark .bg-slate-200,
+.dark .bg-[#5A5A40]/10 {
+  background-color: #25251F !important;
+  color: #F1F1EB !important;
+}
+
+/* High contrast inputs and text fields */
+.dark input,
+.dark select,
+.dark textarea,
+.dark .select,
+.dark .input {
+  background-color: #22221C !important;
+  color: #F1F1EB !important;
+  border-color: #2D2D24 !important;
+}
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #6B705C !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(107, 112, 92, 0.2) !important;
+}
+
+/* Force border styling across all elements */
+.dark .border,
+.dark .border-gray-200,
+.dark .border-slate-200,
+.dark .border-zinc-200,
+.dark .border-gray-100,
+.dark .border-slate-100,
+.dark .border-[#5A5A40]/10,
+.dark [class*="border-"] {
+  border-color: #2D2D24 !important;
+}
+
+/* Dark mode typography and colors */
+.dark .text-slate-800,
+.dark .text-slate-900,
+.dark .text-gray-900,
+.dark .text-zinc-900,
+.dark .text-neutral-900,
+.dark .text-slate-950,
+.dark .text-[#2c2c26],
+.dark .text-[#5A5A40],
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: #F1F1EB !important;
+}
+
+.dark .text-slate-600,
+.dark .text-gray-600,
+.dark .text-zinc-600,
+.dark .text-[#2c2c26]/70,
+.dark .text-[#2c2c26]/60,
+.dark .text-primary-olive {
+  color: #C4C4B5 !important;
+}
+
+.dark .text-slate-500,
+.dark .text-gray-500,
+.dark .text-zinc-500,
+.dark .text-neutral-500,
+.dark .text-slate-400,
+.dark .text-gray-400,
+.dark .text-zinc-400 {
+  color: #959585 !important;
+}
+
+/* Badges and tags in dark mode */
+.dark .bg-emerald-50,
+.dark .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  color: #34D399 !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #FBBF24 !important;
+  border-color: rgba(245, 158, 11, 0.25) !important;
+}
+
+.dark .bg-blue-50,
+.dark .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  color: #60A5FA !important;
+  border-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+.dark .bg-rose-50,
+.dark .bg-rose-100,
+.dark .bg-red-50,
+.dark .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  color: #F87171 !important;
+  border-color: rgba(239, 68, 68, 0.25) !important;
+}
+
+/* Tables and list rows */
+.dark table {
+  border-collapse: separate !important;
+}
+
+.dark tr {
+  background-color: #1A1A16 !important;
+}
+
+.dark tr:hover {
+  background-color: #22221C !important;
+}
+
+.dark th {
+  background-color: #161612 !important;
+  color: #F1F1EB !important;
+  border-bottom: 2px solid #2D2D24 !important;
+}
+
+.dark td {
+  border-bottom: 1px solid #2D2D24 !important;
+}
+
+/* Scrollbar optimizations */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #11110E;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2D2D24;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #404033;
+}
+
+/* Modals and dialog overlays */
+.dark [role="dialog"],
+.dark .modal,
+.dark .fixed.inset-0 {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+.dark [role="dialog"] > div,
+.dark .modal-content {
+  background-color: #1A1A16 !important;
+  border: 1px solid #2D2D24 !important;
+  color: #F1F1EB !important;
+}
+
+/* Dropdown list items and interactive components */
+.dark select option {
+  background-color: #1A1A16 !important;
+  color: #F1F1EB !important;
+}
+
+.dark [role="listbox"],
+.dark .dropdown-menu {
+  background-color: #1A1A16 !important;
+  border-color: #2D2D24 !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark [role="option"]:hover,
+.dark .dropdown-item:hover {
+  background-color: #25251F !important;
+}
+
+/* Buttons in dark mode */
+.dark button.bg-primary-olive,
+.dark button[class*="bg-primary-olive"] {
+  background-color: #6B705C !important;
+  color: #FFFFFF !important;
+}
+
+.dark button.bg-primary-olive:hover,
+.dark button[class*="bg-primary-olive"]:hover {
+  background-color: #5A5E4E !important;
+}
+
+.dark button.bg-gray-100,
+.dark button.bg-slate-100 {
+  background-color: #25251F !important;
+  color: #F1F1EB !important;
+  border-color: #2D2D24 !important;
+}
+
+.dark button.bg-gray-100:hover,
+.dark button.bg-slate-100:hover {
+  background-color: #2E2E26 !important;
+}
+

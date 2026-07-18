@@ -13,8 +13,10 @@ import {
   WifiOff, 
   ChevronDown, 
   ChevronUp,
-  ExternalLink
+  ExternalLink,
+  Settings
 } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface SettingsPanelProps {
   config: SyncConfig;
@@ -22,6 +24,7 @@ interface SettingsPanelProps {
   onRefreshData: () => Promise<void>;
   isLoading: boolean;
   onOpenDebug?: () => void;
+  isDeveloperMode?: boolean;
 }
 
 export default function SettingsPanel({
@@ -29,7 +32,8 @@ export default function SettingsPanel({
   onUpdateConfig,
   onRefreshData,
   isLoading,
-  onOpenDebug
+  onOpenDebug,
+  isDeveloperMode = false
 }: SettingsPanelProps) {
   const [urlInput, setUrlInput] = useState(config.webAppUrl);
   const [isCopied, setIsCopied] = useState(false);
@@ -143,8 +147,36 @@ export default function SettingsPanel({
     }
   };
 
+  if (!isDeveloperMode) {
+    return (
+      <div className="space-y-6 animate-fade-in" id="settings-panel">
+        <div className="bg-white rounded-[20px] border border-gray-200 p-8 shadow-sm text-center max-w-xl mx-auto">
+          <div className="w-16 h-16 rounded-full bg-primary-olive/10 flex items-center justify-center mx-auto mb-5 text-[#5A5A40]">
+            <Settings className="w-8 h-8" />
+          </div>
+          <h3 className="font-serif font-bold text-[#5A5A40] text-lg mb-2.5 uppercase tracking-tight">System Settings</h3>
+          <p className="text-sm text-gray-500 font-medium uppercase leading-relaxed max-w-sm mx-auto">
+            MoveAboard CRM is running in standard cloud-synced mode. All configurations are managed by your administrator.
+          </p>
+          <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-center gap-6 text-xs font-bold text-gray-400 uppercase">
+            <div>Version 1.4.0</div>
+            <div className="w-1.5 h-1.5 bg-gray-300 rounded-full"></div>
+            <div>All Systems Operational</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6" id="settings-panel">
+    <motion.div 
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 15 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-6" 
+      id="settings-panel"
+    >
       {/* Synchronization Status Card */}
       <div className="bg-white rounded-[20px] border border-t-4 border-t-[#475569] border-[#E5E7EB] p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
@@ -365,13 +397,13 @@ export default function SettingsPanel({
               <>
                 <Copy className="w-3.5 h-3.5" /> Copy Code
               </>
-            )}
+            ) /* Copy Code */}
           </button>
         </div>
         <div className="p-4 bg-slate-950 text-[#F8FAFC] font-mono text-[10.5px] leading-relaxed max-h-72 overflow-y-auto">
           <pre>{GOOGLE_APPS_SCRIPT_CODE}</pre>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

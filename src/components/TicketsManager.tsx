@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, Ticket, TicketStatus, FollowUp } from '../types';
+import SuccessCheckmark from './SuccessCheckmark';
 import SmartGlobalSearch from './SmartGlobalSearch';
 import SmartContactActions from './SmartContactActions';
 import SearchableCustomerDropdown from './SearchableCustomerDropdown';
@@ -347,7 +348,7 @@ const TicketsManager = React.memo(function TicketsManager({
       <div className="flex items-center justify-between gap-2">
         <div>
           <h2 className="text-xl font-serif font-bold text-[#3B82F6] tracking-tight uppercase">Support Tickets</h2>
-          <p className="text-[10px] text-gray-400 font-bold uppercase">Track customer documentation, requests & general support histories</p>
+          <p className="text-[13px] text-gray-400 font-bold uppercase">Track customer documentation, requests & general support histories</p>
         </div>
 
         {/* Mode Switcher */}
@@ -357,7 +358,7 @@ const TicketsManager = React.memo(function TicketsManager({
             setAlert({ type: 'idle', message: '' });
           }}
           id="btn-toggle-ticket-view"
-          className="inline-flex items-center gap-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-xs px-5 py-2.5 rounded-full shadow-md shadow-[#3B82F6]/10 transition-colors cursor-pointer h-11"
+          className="inline-flex items-center gap-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-[13px] px-5 py-2.5 rounded-full shadow-md shadow-[#3B82F6]/10 transition-colors cursor-pointer h-11"
         >
           {subView === 'list' ? (
             <>
@@ -381,9 +382,9 @@ const TicketsManager = React.memo(function TicketsManager({
       )}
 
       {alert.type === 'success' && (
-        <Alert variant="success" id="ticket-alert-success">
-          <span className="font-semibold uppercase">{alert.message}</span>
-        </Alert>
+        <div id="ticket-alert-success" className="p-4 bg-emerald-50/50 dark:bg-[#1b3a24]/10 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl flex flex-col items-center justify-center">
+          <SuccessCheckmark size={36} message={alert.message} />
+        </div>
       )}
 
       {alert.type === 'loading' && (
@@ -407,9 +408,9 @@ const TicketsManager = React.memo(function TicketsManager({
               <div className="space-y-4">
                 {isAddingCustomerInline ? (
                   /* Inline New Customer Creation Form */
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-gray-200 space-y-4 animate-fade-in">
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                      <h4 className="font-serif font-bold text-xs text-[#3B82F6] uppercase">Add New Customer</h4>
+                  <div className="p-4 bg-slate-50 dark:bg-[#1a1a15] rounded-2xl border border-gray-200 dark:border-[#8a8a70]/20 space-y-4 animate-fade-in">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-[#8a8a70]/10 pb-2">
+                      <h4 className="font-serif font-bold text-[13px] text-[#3B82F6] dark:text-[#60a5fa] uppercase">Add New Customer</h4>
                       <button
                         type="button"
                         onClick={() => {
@@ -417,7 +418,7 @@ const TicketsManager = React.memo(function TicketsManager({
                           setNewCustomerName('');
                           setNewCustomerMobile('');
                         }}
-                        className="text-xs font-bold text-gray-400 hover:text-gray-600 uppercase cursor-pointer"
+                        className="text-[13px] font-bold text-gray-400 hover:text-gray-600 dark:text-[#8a8a70] dark:hover:text-[#ecece5] uppercase cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -425,13 +426,13 @@ const TicketsManager = React.memo(function TicketsManager({
                     
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        <label className="block text-[13px] font-bold text-gray-500 dark:text-[#8a8a70] uppercase tracking-wider mb-1">
                           Full Name <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="text"
                           required
-                          className="w-full text-xs bg-white border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent"
+                          className="w-full text-[13px] bg-white dark:bg-[#20201a] border border-gray-200 dark:border-[#8a8a70]/30 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-[#1F2937] dark:text-[#ecece5]"
                           placeholder="E.G. JOHN DOE"
                           value={newCustomerName}
                           onChange={(e) => setNewCustomerName(e.target.value)}
@@ -439,13 +440,13 @@ const TicketsManager = React.memo(function TicketsManager({
                       </div>
                       
                       <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        <label className="block text-[13px] font-bold text-gray-500 dark:text-[#8a8a70] uppercase tracking-wider mb-1">
                           Mobile Number <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="tel"
                           required
-                          className="w-full text-xs bg-white border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent"
+                          className="w-full text-[13px] bg-white dark:bg-[#20201a] border border-gray-200 dark:border-[#8a8a70]/30 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-[#1F2937] dark:text-[#ecece5]"
                           placeholder="E.G. +880 1712-345678"
                           value={newCustomerMobile}
                           onChange={(e) => setNewCustomerMobile(e.target.value)}
@@ -483,7 +484,7 @@ const TicketsManager = React.memo(function TicketsManager({
                               setAlert({ type: 'error', message: res.error || 'Failed to create customer.' });
                             }
                           }}
-                          className="bg-[#10B981] hover:bg-[#059669] text-white px-5 py-2 rounded-full text-xs font-bold cursor-pointer transition-colors uppercase shadow-xs"
+                          className="bg-[#10B981] hover:bg-[#059669] text-white px-5 py-2 rounded-full text-[13px] font-bold cursor-pointer transition-colors uppercase shadow-xs animate-none"
                         >
                           Save Customer
                         </button>
@@ -494,7 +495,7 @@ const TicketsManager = React.memo(function TicketsManager({
                             setNewCustomerName('');
                             setNewCustomerMobile('');
                           }}
-                          className="border border-gray-200 hover:bg-gray-50 px-5 py-2 rounded-full text-xs font-bold text-gray-500 cursor-pointer transition-colors uppercase"
+                          className="border border-gray-200 dark:border-[#8a8a70]/30 hover:bg-gray-50 dark:hover:bg-[#1a1a15]/50 px-5 py-2 rounded-full text-[13px] font-bold text-gray-500 dark:text-[#8a8a70] cursor-pointer transition-colors uppercase"
                         >
                           Cancel
                         </button>

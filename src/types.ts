@@ -1,3 +1,9 @@
+export interface AdditionalNumber {
+  id: string;
+  number: string;
+  type: 'Secondary' | 'Additional';
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -11,6 +17,7 @@ export interface Customer {
   customerCategory?: string;
   address?: string;
   gender?: string;
+  additionalNumbers?: AdditionalNumber[];
 }
 
 export type TicketStatus = 'Open' | 'Closed';

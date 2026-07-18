@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Customer, Ticket, FollowUp, User } from '../types';
 import SmartContactActions from './SmartContactActions';
 import InlineCopy from './InlineCopy';
+import { getLoggedActivities } from '../utils/activityLogger';
 import { 
   Users, 
   Ticket as TicketIcon, 
@@ -34,6 +35,7 @@ interface DashboardProps {
   onQuickAddCustomer: () => void;
   currentUser?: User | null;
   onCategorySelect?: (category: string) => void;
+  newlyUpdatedIds?: Set<string>;
 }
 
 const Dashboard = React.memo(function Dashboard({
@@ -45,10 +47,21 @@ const Dashboard = React.memo(function Dashboard({
   onQuickAddTicket,
   onQuickAddCustomer,
   currentUser,
-  onCategorySelect
+  onCategorySelect,
+  newlyUpdatedIds
 }: DashboardProps) {
   
   const todayStr = new Date().toISOString().split('T')[0];
+
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const handleActivity = () => {
+      setActivityRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('crm-activity-logged', handleActivity);
+    return () => window.removeEventListener('crm-activity-logged', handleActivity);
+  }, []);
 
   // Search Bar States
   const [searchValue, setSearchValue] = useState('');
@@ -125,7 +138,7 @@ const Dashboard = React.memo(function Dashboard({
   const timelineEvents = useMemo(() => {
     const events: {
       id: string;
-      type: 'customer' | 'ticket' | 'followup' | 'closed-ticket';
+      type: 'customer' | 'ticket' | 'followup' | 'closed-ticket' | 'call' | 'whatsapp' | 'imo' | 'updated' | 'status-changed';
       title: string;
       description: string;
       time: string;
@@ -172,11 +185,67 @@ const Dashboard = React.memo(function Dashboard({
       });
     });
 
+    // 4. Custom Logged Activities
+    try {
+      const logged = getLoggedActivities();
+      logged.forEach(act => {
+        const cust = customers.find(c => c.id === act.customerId);
+        const name = cust ? cust.name : 'Unknown';
+        
+        let mappedType: 'customer' | 'ticket' | 'followup' | 'closed-ticket' | 'call' | 'whatsapp' | 'imo' | 'updated' | 'status-changed' = 'call';
+        let title = 'Activity Logged';
+
+        if (act.type === 'CREATED') {
+          mappedType = 'customer';
+          title = `Profile Created`;
+        } else if (act.type === 'TICKET_CREATED') {
+          mappedType = 'ticket';
+          title = `Ticket Filed`;
+        } else if (act.type === 'TICKET_CLOSED') {
+          mappedType = 'closed-ticket';
+          title = `Ticket Resolved`;
+        } else if (act.type === 'FOLLOWUP_ADDED') {
+          mappedType = 'followup';
+          title = `Followup Added`;
+        } else if (act.type === 'FOLLOWUP_COMPLETED') {
+          mappedType = 'followup';
+          title = `Followup Finished`;
+        } else if (act.type === 'CALL_LOGGED') {
+          mappedType = 'call';
+          title = `Voice Call`;
+        } else if (act.type === 'WHATSAPP_CONTACTED') {
+          mappedType = 'whatsapp';
+          title = `WhatsApp Contact`;
+        } else if (act.type === 'IMO_CONTACTED') {
+          mappedType = 'imo';
+          title = `IMO Contact`;
+        } else if (act.type === 'UPDATED') {
+          mappedType = 'updated';
+          title = `Profile Updated`;
+        } else if (act.type === 'STATUS_CHANGED') {
+          mappedType = 'status-changed';
+          title = `Status Changed`;
+        }
+
+        events.push({
+          id: act.id,
+          type: mappedType,
+          title: `${title} - ${name}`,
+          description: act.activity,
+          time: new Date(act.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+          rawDate: act.timestamp,
+          meta: `Cust ID: ${act.customerId}`
+        });
+      });
+    } catch (e) {
+      console.error('Error listing custom logged activities in dashboard:', e);
+    }
+
     // Sort newest first
     return events
       .sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime())
-      .slice(0, 8);
-  }, [customers, tickets, followUps]);
+      .slice(0, 2);
+  }, [customers, tickets, followUps, activityRefreshKey]);
 
   // Recent data sets (sorted newest first)
   const recentCustomers = useMemo(() => {
@@ -236,7 +305,7 @@ const Dashboard = React.memo(function Dashboard({
           </div>
           <input
             type="text"
-            className="w-full pl-12 pr-12 py-3.5 text-xs bg-transparent border-none focus:outline-none text-[#1F2937] placeholder-gray-400 font-medium"
+            className="w-full pl-12 pr-12 py-3.5 text-[14px] bg-transparent border-none focus:outline-none text-[#1F2937] dark:text-[#f5f5f0] placeholder-gray-400 font-medium"
             placeholder="Search customers by name, mobile suffix, customer ID..."
             value={searchValue}
             onChange={(e) => {
@@ -271,20 +340,20 @@ const Dashboard = React.memo(function Dashboard({
                     className="p-4 hover:bg-[#F9FAFB] cursor-pointer transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#6B705C]/10 text-[#6B705C] flex items-center justify-center text-xs font-bold">
+                      <div className="w-8 h-8 rounded-full bg-[#6B705C]/10 text-[#6B705C] flex items-center justify-center text-[13px] font-bold">
                         {c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <span className="text-xs font-bold text-[#1F2937] uppercase">{c.name}</span>
-                        <p className="text-[10px] text-gray-500 font-mono mt-0.5">{c.id}</p>
+                        <span className="text-[14px] font-bold text-[#1F2937] dark:text-[#f5f5f0] uppercase">{c.name}</span>
+                        <p className="text-[13px] text-gray-500 font-mono mt-0.5">{c.id}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 text-[10px] text-[#6B7280] font-semibold">
+                    <div className="flex items-center gap-4 text-[13px] text-[#6B7280] dark:text-[#959585] font-semibold">
                       <span className="flex items-center gap-1">
                         <span>📱</span>
                         <span>{c.mobileNumber}</span>
                       </span>
-                      <span className="text-[#3B82F6] hover:underline font-bold flex items-center gap-0.5">
+                      <span className="text-[#3B82F6] dark:text-[#60A5FA] hover:underline font-bold flex items-center gap-0.5">
                         OPEN PROFILE <ChevronRight className="w-3.5 h-3.5" />
                       </span>
                     </div>
@@ -310,16 +379,16 @@ const Dashboard = React.memo(function Dashboard({
 
         <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/10 text-[9px] font-bold tracking-widest uppercase">
-              <Sparkles className="w-3 h-3 text-[#F59E0B]" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/10 text-[13px] font-bold tracking-widest uppercase">
+              <Sparkles className="w-3.5 h-3.5 text-[#F59E0B]" />
               <span>ENTERPRISE SYSTEM IS ACTIVE</span>
             </div>
             
-            <h2 className="text-xl sm:text-2xl font-serif font-bold text-white tracking-tight uppercase leading-tight">
+            <h2 className="text-[22px] sm:text-[28px] font-serif font-bold text-white tracking-tight uppercase leading-tight">
               WELCOME BACK
             </h2>
             
-            <p className="text-xs sm:text-sm text-white/85 font-normal max-w-xl leading-relaxed uppercase">
+            <p className="text-[13px] sm:text-[15px] text-white/85 font-normal max-w-xl leading-relaxed uppercase">
               TODAY IS {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}. YOU HAVE <span className="font-bold text-[#F59E0B]">{todaysFollowUpsCount} PENDING FOLLOW-UPS</span> SCHEDULED FOR TODAY.
             </p>
           </div>
@@ -328,18 +397,18 @@ const Dashboard = React.memo(function Dashboard({
             {/* Today's Summary statistics badge list inside hero */}
             <div className="bg-black/15 backdrop-blur-sm rounded-xl p-3 border border-white/5 flex items-center gap-4 text-center">
               <div>
-                <span className="block text-[18px] font-bold text-white font-serif">{totalCustomersCount}</span>
-                <span className="text-[8px] text-white/70 font-semibold tracking-wider">CUSTOMERS</span>
+                <span className="block text-[18px] sm:text-[20px] font-bold text-white font-serif">{totalCustomersCount}</span>
+                <span className="text-[13px] text-white/70 font-semibold tracking-wider">CUSTOMERS</span>
               </div>
               <div className="w-[1px] h-6 bg-white/10" />
               <div>
-                <span className="block text-[18px] font-bold text-[#3B82F6] font-serif">{openTicketsCount}</span>
-                <span className="text-[8px] text-white/70 font-semibold tracking-wider">OPEN TKTS</span>
+                <span className="block text-[18px] sm:text-[20px] font-bold text-[#3B82F6] font-serif">{openTicketsCount}</span>
+                <span className="text-[13px] text-white/70 font-semibold tracking-wider">OPEN TKTS</span>
               </div>
               <div className="w-[1px] h-6 bg-white/10" />
               <div>
-                <span className="block text-[18px] font-bold text-[#F59E0B] font-serif">{todaysFollowUpsCount}</span>
-                <span className="text-[8px] text-white/70 font-semibold tracking-wider">TODAY'S FUP</span>
+                <span className="block text-[18px] sm:text-[20px] font-bold text-[#F59E0B] font-serif">{todaysFollowUpsCount}</span>
+                <span className="text-[13px] text-white/70 font-semibold tracking-wider">TODAY'S FUP</span>
               </div>
             </div>
           </div>
@@ -363,13 +432,13 @@ const Dashboard = React.memo(function Dashboard({
             className="group relative overflow-hidden bg-gradient-to-br from-[#22C55E]/10 to-[#15803D]/5 border-t-4 border-t-[#22C55E] p-4 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#15803D] uppercase tracking-wider">Customers</span>
+              <span className="text-[13px] font-bold text-[#15803D] uppercase tracking-wider">Customers</span>
               <div className="p-1.5 bg-[#22C55E]/20 text-[#22C55E] rounded-xl">
                 <Users className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-serif font-bold text-[#1F2937]">{totalCustomersCount}</p>
-            <p className="text-[8px] text-[#6B7280] font-semibold mt-1 uppercase">Total Directory</p>
+            <p className="text-[30px] sm:text-[36px] font-serif font-bold text-[#1F2937] leading-none">{totalCustomersCount}</p>
+            <p className="text-[13px] text-[#6B7280] font-semibold mt-1 uppercase">Total Directory</p>
           </div>
 
           {/* Card 2: Open Tickets (Blue Gradient) */}
@@ -378,13 +447,13 @@ const Dashboard = React.memo(function Dashboard({
             className="group relative overflow-hidden bg-gradient-to-br from-[#3B82F6]/10 to-[#1D4ED8]/5 border-t-4 border-t-[#3B82F6] p-4 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#1D4ED8] uppercase tracking-wider">Open Tickets</span>
+              <span className="text-[13px] font-bold text-[#1D4ED8] uppercase tracking-wider">Open Tickets</span>
               <div className="p-1.5 bg-[#3B82F6]/20 text-[#3B82F6] rounded-xl">
                 <TicketIcon className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-serif font-bold text-[#1F2937]">{openTicketsCount}</p>
-            <p className="text-[8px] text-[#6B7280] font-semibold mt-1 uppercase">Awaiting Action</p>
+            <p className="text-[30px] sm:text-[36px] font-serif font-bold text-[#1F2937] leading-none">{openTicketsCount}</p>
+            <p className="text-[13px] text-[#6B7280] font-semibold mt-1 uppercase">Awaiting Action</p>
           </div>
 
           {/* Card 3: Closed Tickets (Red Gradient) */}
@@ -393,13 +462,13 @@ const Dashboard = React.memo(function Dashboard({
             className="group relative overflow-hidden bg-gradient-to-br from-[#EF4444]/10 to-[#B91C1C]/5 border-t-4 border-t-[#EF4444] p-4 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#B91C1C] uppercase tracking-wider">Closed Tickets</span>
+              <span className="text-[13px] font-bold text-[#B91C1C] uppercase tracking-wider">Closed Tickets</span>
               <div className="p-1.5 bg-[#EF4444]/20 text-[#EF4444] rounded-xl">
                 <CheckCircle2 className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-serif font-bold text-[#1F2937]">{closedTicketsCount}</p>
-            <p className="text-[8px] text-[#6B7280] font-semibold mt-1 uppercase">Completed Cases</p>
+            <p className="text-[30px] sm:text-[36px] font-serif font-bold text-[#1F2937] leading-none">{closedTicketsCount}</p>
+            <p className="text-[13px] text-[#6B7280] font-semibold mt-1 uppercase">Completed Cases</p>
           </div>
 
           {/* Card 4: Follow Ups (Purple Gradient) */}
@@ -408,13 +477,13 @@ const Dashboard = React.memo(function Dashboard({
             className="group relative overflow-hidden bg-gradient-to-br from-[#8B5CF6]/10 to-[#6D28D9]/5 border-t-4 border-t-[#8B5CF6] p-4 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#6D28D9] uppercase tracking-wider">Follow Ups</span>
+              <span className="text-[13px] font-bold text-[#6D28D9] uppercase tracking-wider">Follow Ups</span>
               <div className="p-1.5 bg-[#8B5CF6]/20 text-[#8B5CF6] rounded-xl">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-serif font-bold text-[#1F2937]">{pendingFollowUpsCount}</p>
-            <p className="text-[8px] text-[#6B7280] font-semibold mt-1 uppercase">Reminders Pending</p>
+            <p className="text-[30px] sm:text-[36px] font-serif font-bold text-[#1F2937] leading-none">{pendingFollowUpsCount}</p>
+            <p className="text-[13px] text-[#6B7280] font-semibold mt-1 uppercase">Reminders Pending</p>
           </div>
 
           {/* Card 5: Today (Orange Gradient) */}
@@ -423,13 +492,13 @@ const Dashboard = React.memo(function Dashboard({
             className="group relative overflow-hidden bg-gradient-to-br from-[#F59E0B]/10 to-[#C2410C]/5 border-t-4 border-t-[#F59E0B] p-4 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#C2410C] uppercase tracking-wider">Today</span>
+              <span className="text-[13px] font-bold text-[#C2410C] uppercase tracking-wider">Today</span>
               <div className="p-1.5 bg-[#F59E0B]/20 text-[#F59E0B] rounded-xl">
                 <Calendar className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-serif font-bold text-[#1F2937]">{todaysFollowUpsCount}</p>
-            <p className="text-[8px] text-[#6B7280] font-semibold mt-1 uppercase">Callback Reminders</p>
+            <p className="text-[30px] sm:text-[36px] font-serif font-bold text-[#1F2937] leading-none">{todaysFollowUpsCount}</p>
+            <p className="text-[13px] text-[#6B7280] font-semibold mt-1 uppercase">Callback Reminders</p>
           </div>
 
           {/* Card 6: Live Sync (Emerald Gradient) */}
@@ -438,72 +507,19 @@ const Dashboard = React.memo(function Dashboard({
             className="group relative overflow-hidden bg-gradient-to-br from-[#06B6D4]/10 to-[#0369A1]/5 border-t-4 border-t-[#06B6D4] p-4 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#0369A1] uppercase tracking-wider">Database</span>
+              <span className="text-[13px] font-bold text-[#0369A1] uppercase tracking-wider">Database</span>
               <div className="p-1.5 bg-[#06B6D4]/20 text-[#06B6D4] rounded-xl">
                 <Wifi className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-2xl font-serif font-bold text-[#1F2937]">LIVE</p>
-            <p className="text-[8px] text-[#6B7280] font-semibold mt-1 uppercase">Status Verified</p>
+            <p className="text-[30px] sm:text-[36px] font-serif font-bold text-[#1F2937] leading-none">LIVE</p>
+            <p className="text-[13px] text-[#6B7280] font-semibold mt-1 uppercase">Status Verified</p>
           </div>
 
         </div>
       </div>
 
-      {/* 3.5. Customer Category Statistics Bento Grid */}
-      <div className="space-y-4" id="customer-category-statistics-section">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-6 rounded-full bg-[#10B981]" />
-          <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-sm tracking-tight uppercase">
-            CUSTOMER CATEGORY STATISTICS
-          </h3>
-        </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="category-stats-widgets-grid">
-          {Object.entries(categoryActiveCounts).map(([cat, count]) => {
-            let colorClasses = "";
-            
-            if (cat === 'AGENT') {
-              colorClasses = "from-emerald-500/10 to-emerald-600/5 border-t-[#10B981] text-[#10B981]";
-            } else if (cat.includes('PRODUCTION')) {
-              colorClasses = "from-blue-500/10 to-blue-600/5 border-t-[#3B82F6] text-[#3B82F6]";
-            } else if (cat.includes('QUALITY')) {
-              colorClasses = "from-purple-500/10 to-purple-600/5 border-t-[#8B5CF6] text-[#8B5CF6]";
-            } else if (cat === 'IRON MAN') {
-              colorClasses = "from-amber-500/10 to-amber-600/5 border-t-[#F59E0B] text-[#F59E0B]";
-            } else if (cat === 'OPERATOR') {
-              colorClasses = "from-cyan-500/10 to-cyan-600/5 border-t-[#06B6D4] text-[#06B6D4]";
-            } else if (cat === 'CHECKER') {
-              colorClasses = "from-rose-500/10 to-rose-600/5 border-t-[#EF4444] text-[#EF4444]";
-            } else {
-              colorClasses = "from-teal-500/10 to-teal-600/5 border-t-[#14B8A6] text-[#14B8A6]";
-            }
-
-            return (
-              <div
-                key={cat}
-                onClick={() => onCategorySelect?.(cat)}
-                className={`group relative overflow-hidden bg-gradient-to-br border-t-4 p-5 rounded-[20px] border border-[#E5E7EB] text-left shadow-xs hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer ${colorClasses}`}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-wider text-gray-500 truncate mb-1">
-                  {cat}
-                </p>
-                <div className="flex items-baseline gap-1.5 mt-2">
-                  <span className="text-2xl font-serif font-bold text-[#1F2937]">
-                    {count}
-                  </span>
-                  <span className="text-[9px] font-bold uppercase tracking-wider opacity-90">
-                    ACTIVE
-                  </span>
-                </div>
-                <div className="absolute bottom-3 right-4 opacity-5 group-hover:opacity-15 transition-opacity">
-                  <Users className="w-12 h-12" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {/* 4. Quick Actions (Replace plain white with colorful action cards) */}
       <div className="space-y-4" id="quick-actions-section">
@@ -522,8 +538,8 @@ const Dashboard = React.memo(function Dashboard({
             className="flex flex-col items-center justify-center p-5 rounded-[20px] bg-gradient-to-br from-[#22C55E] to-[#15803D] text-white text-center shadow-lg shadow-[#22C55E]/10 hover:scale-105 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-h-[120px]"
           >
             <UserPlus className="w-8 h-8 text-white mb-2 transition-transform group-hover:rotate-12 duration-200" />
-            <span className="text-xs font-bold uppercase tracking-wider">Add Customer</span>
-            <span className="text-[9px] text-white/80 font-normal mt-0.5 uppercase">Register profile</span>
+            <span className="text-[14px] font-bold uppercase tracking-wider">Add Customer</span>
+            <span className="text-[13px] text-white/80 font-normal mt-0.5 uppercase">Register profile</span>
           </button>
 
           {/* Action 2: Create Ticket (Blue) */}
@@ -532,8 +548,8 @@ const Dashboard = React.memo(function Dashboard({
             className="flex flex-col items-center justify-center p-5 rounded-[20px] bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] text-white text-center shadow-lg shadow-[#3B82F6]/10 hover:scale-105 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-h-[120px]"
           >
             <Plus className="w-8 h-8 text-white mb-2 transition-transform group-hover:rotate-90 duration-200" />
-            <span className="text-xs font-bold uppercase tracking-wider">Create Ticket</span>
-            <span className="text-[9px] text-white/80 font-normal mt-0.5 uppercase">File assistance</span>
+            <span className="text-[14px] font-bold uppercase tracking-wider">Create Ticket</span>
+            <span className="text-[13px] text-white/80 font-normal mt-0.5 uppercase">File assistance</span>
           </button>
 
           {/* Action 3: Search Customer (Purple) */}
@@ -542,8 +558,8 @@ const Dashboard = React.memo(function Dashboard({
             className="flex flex-col items-center justify-center p-5 rounded-[20px] bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] text-white text-center shadow-lg shadow-[#8B5CF6]/10 hover:scale-105 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-h-[120px]"
           >
             <Search className="w-8 h-8 text-white mb-2 transition-transform group-hover:translate-x-0.5 duration-200" />
-            <span className="text-xs font-bold uppercase tracking-wider">Search Customer</span>
-            <span className="text-[9px] text-white/80 font-normal mt-0.5 uppercase">Lookup database</span>
+            <span className="text-[14px] font-bold uppercase tracking-wider">Search Customer</span>
+            <span className="text-[13px] text-white/80 font-normal mt-0.5 uppercase">Lookup database</span>
           </button>
 
           {/* Action 4: Follow Ups (Orange) */}
@@ -552,8 +568,8 @@ const Dashboard = React.memo(function Dashboard({
             className="flex flex-col items-center justify-center p-5 rounded-[20px] bg-gradient-to-br from-[#F59E0B] to-[#D97706] text-white text-center shadow-lg shadow-[#F59E0B]/10 hover:scale-105 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-h-[120px]"
           >
             <Clock className="w-8 h-8 text-white mb-2 transition-transform group-hover:scale-110 duration-200" />
-            <span className="text-xs font-bold uppercase tracking-wider">Follow Ups</span>
-            <span className="text-[9px] text-white/80 font-normal mt-0.5 uppercase">Call logs</span>
+            <span className="text-[14px] font-bold uppercase tracking-wider">Follow Ups</span>
+            <span className="text-[13px] text-white/80 font-normal mt-0.5 uppercase">Call logs</span>
           </button>
 
           {/* Action 5: Settings (Slate) */}
@@ -562,8 +578,8 @@ const Dashboard = React.memo(function Dashboard({
             className="flex flex-col items-center justify-center p-5 rounded-[20px] bg-gradient-to-br from-[#475569] to-[#334155] text-white text-center shadow-lg shadow-[#475569]/10 hover:scale-105 active:scale-[0.98] transition-all duration-200 cursor-pointer group min-h-[120px] col-span-2 sm:col-span-1"
           >
             <Settings className="w-8 h-8 text-white mb-2 transition-transform group-hover:rotate-45 duration-200" />
-            <span className="text-xs font-bold uppercase tracking-wider">Settings</span>
-            <span className="text-[9px] text-white/80 font-normal mt-0.5 uppercase">Configurations</span>
+            <span className="text-[14px] font-bold uppercase tracking-wider">Settings</span>
+            <span className="text-[13px] text-white/80 font-normal mt-0.5 uppercase">Configurations</span>
           </button>
 
         </div>
@@ -583,13 +599,13 @@ const Dashboard = React.memo(function Dashboard({
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-[#8B5CF6] rounded" />
-                <h3 className="font-serif font-bold text-[#1F2937] text-xs uppercase tracking-tight">
+                <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[15px] uppercase tracking-tight">
                   UPCOMING CALLBACK REMINDERS
                 </h3>
               </div>
               <button 
                 onClick={() => onNavigate('followups')}
-                className="text-[10px] font-bold text-[#6B705C] hover:underline uppercase"
+                className="text-[13px] font-bold text-[#6B705C] dark:text-[#A3A895] hover:underline uppercase"
               >
                 View All
               </button>
@@ -608,19 +624,19 @@ const Dashboard = React.memo(function Dashboard({
                       <div className="flex items-start justify-between gap-3 w-full">
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-bold text-[#1F2937] text-xs uppercase">{f.name}</span>
+                            <span className="font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[14px] uppercase">{f.name}</span>
                             <InlineCopy type="name" value={f.name} className="min-w-[20px] min-h-[20px] p-0" />
                             {overdue ? (
-                              <span className="text-[8px] px-2 py-0.5 rounded-full bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444] font-bold uppercase tracking-wider">
+                              <span className="text-[13px] px-2 py-0.5 rounded-full bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444] font-bold uppercase tracking-wider">
                                 OVERDUE ({getRelativeDateLabel(f.followUpDate)})
                               </span>
                             ) : (
-                              <span className="text-[8px] px-2 py-0.5 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20 text-[#F59E0B] font-bold uppercase tracking-wider">
+                              <span className="text-[13px] px-2 py-0.5 rounded-full bg-[#F59E0B]/10 border border-[#F59E0B]/20 text-[#F59E0B] font-bold uppercase tracking-wider">
                                 {getRelativeDateLabel(f.followUpDate)} @ {f.followUpTime}
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-[#6B7280] italic leading-relaxed">
+                          <p className="text-[13px] text-[#6B7280] dark:text-[#959585] italic leading-relaxed">
                             "{f.notes}"
                           </p>
                         </div>
@@ -633,6 +649,7 @@ const Dashboard = React.memo(function Dashboard({
                             whatsAppNumber={customer.whatsAppNumber}
                             imoNumber={customer.imoNumber}
                             customerId={customer.id}
+                            additionalNumbers={customer.additionalNumbers}
                           />
                         </div>
                       )}
@@ -656,13 +673,13 @@ const Dashboard = React.memo(function Dashboard({
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-[#22C55E] rounded" />
-                <h3 className="font-serif font-bold text-[#1F2937] text-xs uppercase tracking-tight">
+                <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[15px] uppercase tracking-tight">
                   RECENTLY REGISTERED CLIENTS
                 </h3>
               </div>
               <button 
                 onClick={() => onNavigate('customers')}
-                className="text-[10px] font-bold text-[#6B705C] hover:underline uppercase"
+                className="text-[13px] font-bold text-[#6B705C] dark:text-[#A3A895] hover:underline uppercase"
               >
                 View All
               </button>
@@ -680,39 +697,40 @@ const Dashboard = React.memo(function Dashboard({
 
                   const custTickets = tickets.filter(t => t.customerId === c.id);
                   const custFollowups = followUps.filter(f => f.customerId === f.customerId);
+                  const isHighlighted = newlyUpdatedIds?.has(c.id);
 
                   return (
                     <div
                       key={c.id}
-                      className="p-3.5 bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] hover:border-[#22C55E]/40 hover:-translate-y-0.5 transition-all duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                      className={`p-3.5 rounded-xl border transition-all duration-500 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isHighlighted ? 'bg-emerald-50/20 dark:bg-emerald-950/25 border-emerald-500 ring-2 ring-emerald-500/50 animate-pulse scale-[1.01] shadow-md' : 'bg-[#F9FAFB] dark:bg-[#1C1C14] border-[#E5E7EB] hover:border-[#22C55E]/40 hover:-translate-y-0.5'}`}
                     >
                       <div 
                         onClick={() => onSelectCustomer(c)}
                         className="flex items-center gap-3 cursor-pointer flex-1"
                       >
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#6B705C] to-[#2E4F32] text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-xs uppercase">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#6B705C] to-[#2E4F32] text-white text-[13px] font-bold flex items-center justify-center shrink-0 shadow-xs uppercase">
                           {initials}
                         </div>
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <p className="text-xs font-bold text-[#1F2937] hover:underline uppercase leading-tight">{c.name}</p>
+                            <p className="text-[14px] font-bold text-[#1F2937] dark:text-[#f5f5f0] hover:underline uppercase leading-tight">{c.name}</p>
                             <InlineCopy type="name" value={c.name} className="min-w-[18px] min-h-[18px] p-0" />
-                            <span className="font-mono text-[9px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.1 rounded-md">
+                            <span className="font-mono text-[13px] font-bold text-gray-500 bg-gray-100 dark:bg-zinc-800 border border-gray-200 px-1.5 py-0.1 rounded-md">
                               {c.id}
                             </span>
                             <InlineCopy type="customerId" value={c.id} className="min-w-[18px] min-h-[18px] p-0" />
                           </div>
                           
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-gray-500 font-semibold">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-gray-500 dark:text-[#959585] font-semibold">
                             <span className="flex items-center gap-1">
                               <span>📱</span>
                               <span>{c.mobileNumber}</span>
                               <InlineCopy type="mobile" value={c.mobileNumber} className="min-w-[18px] min-h-[18px] p-0" />
                             </span>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.1 bg-[#3B82F6]/10 text-[#3B82F6] rounded-md text-[8px] font-bold uppercase">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.1 bg-[#3B82F6]/10 text-[#3B82F6] rounded-md text-[13px] font-bold uppercase">
                               TKT: {custTickets.length}
                             </span>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.1 bg-[#8B5CF6]/10 text-[#8B5CF6] rounded-md text-[8px] font-bold uppercase">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.1 bg-[#8B5CF6]/10 text-[#8B5CF6] rounded-md text-[13px] font-bold uppercase">
                               FUP: {custFollowups.length}
                             </span>
                           </div>
@@ -726,6 +744,7 @@ const Dashboard = React.memo(function Dashboard({
                           whatsAppNumber={c.whatsAppNumber}
                           imoNumber={c.imoNumber}
                           customerId={c.id}
+                          additionalNumbers={c.additionalNumbers}
                         />
                         <button 
                           onClick={() => onSelectCustomer(c)}
@@ -759,16 +778,16 @@ const Dashboard = React.memo(function Dashboard({
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-[#06B6D4] rounded" />
-                <h3 className="font-serif font-bold text-[#1F2937] text-xs uppercase tracking-tight">
+                <h3 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[15px] uppercase tracking-tight">
                   LIVE ACTIVITY FEED TIMELINE
                 </h3>
               </div>
-              <span className="text-[9px] font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full animate-pulse uppercase">
+              <span className="text-[13px] font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/30 rounded-full animate-pulse uppercase">
                 REAL-TIME UPDATES
               </span>
             </div>
 
-            <div className="relative pl-6 border-l border-gray-200 space-y-6 py-2" id="vertical-timeline-container">
+            <div className="relative pl-6 border-l border-gray-200 dark:border-zinc-800 space-y-6 py-2" id="vertical-timeline-container">
               {timelineEvents.length > 0 ? (
                 timelineEvents.map((evt) => {
                   
@@ -787,25 +806,40 @@ const Dashboard = React.memo(function Dashboard({
                   } else if (evt.type === 'followup') {
                     dotColor = 'bg-[#F59E0B] ring-4 ring-[#F59E0B]/20';
                     iconTag = '📅';
+                  } else if (evt.type === 'call') {
+                    dotColor = 'bg-emerald-500 ring-4 ring-emerald-500/20';
+                    iconTag = '📞';
+                  } else if (evt.type === 'whatsapp') {
+                    dotColor = 'bg-[#25D366] ring-4 ring-[#25D366]/20';
+                    iconTag = '💬';
+                  } else if (evt.type === 'imo') {
+                    dotColor = 'bg-sky-500 ring-4 ring-sky-500/20';
+                    iconTag = '🔵';
+                  } else if (evt.type === 'updated') {
+                    dotColor = 'bg-purple-500 ring-4 ring-purple-500/20';
+                    iconTag = '🔄';
+                  } else if (evt.type === 'status-changed') {
+                    dotColor = 'bg-amber-500 ring-4 ring-amber-500/20';
+                    iconTag = '⚠️';
                   }
 
                   return (
                     <div key={evt.id} className="relative group/item">
                       {/* Timeline Dot */}
-                      <span className={`absolute -left-[31px] top-1 w-3.5 h-3.5 rounded-full ${dotColor} flex items-center justify-center text-[8px] text-white font-bold transition-all duration-200 group-hover/item:scale-125`} />
+                      <span className={`absolute -left-[31px] top-1 w-3.5 h-3.5 rounded-full ${dotColor} flex items-center justify-center text-[13px] text-white font-bold transition-all duration-200 group-hover/item:scale-125`} />
                       
                       <div className="space-y-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-bold text-[#1F2937] uppercase tracking-wide flex items-center gap-1.5">
+                          <span className="text-[13px] font-bold text-[#1F2937] dark:text-[#f5f5f0] uppercase tracking-wide flex items-center gap-1.5">
                             <span>{iconTag}</span>
                             <span>{evt.title}</span>
                           </span>
-                          <span className="text-[9px] font-mono text-gray-500 font-bold uppercase">{evt.time}</span>
+                          <span className="text-[13px] font-mono text-gray-500 dark:text-[#959585] font-bold uppercase">{evt.time}</span>
                         </div>
-                        <p className="text-xs text-gray-600 font-medium leading-relaxed uppercase">{evt.description}</p>
+                        <p className="text-[14px] text-gray-600 dark:text-[#C4C4B5] font-medium leading-relaxed uppercase">{evt.description}</p>
                         {evt.meta && (
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[8px] font-mono font-bold text-gray-400 bg-gray-50 border border-gray-200/50 px-1.5 rounded-md">
+                            <span className="text-[13px] font-mono font-bold text-gray-400 bg-gray-50 dark:bg-zinc-800 border border-gray-200/50 px-1.5 rounded-md">
                               {evt.meta}
                             </span>
                             <InlineCopy type={evt.type === 'ticket' || evt.type === 'closed-ticket' ? 'ticketId' : 'customerId'} value={evt.meta.replace(/Ref:|ID:|Ticket ID:/i, '').trim()} className="min-w-[16px] min-h-[16px] p-0" />
@@ -896,6 +930,7 @@ const Dashboard = React.memo(function Dashboard({
                               imoNumber={customer.imoNumber}
                               customerId={customer.id}
                               ticketId={t.id}
+                              additionalNumbers={customer.additionalNumbers}
                             />
                           </div>
                         )}
@@ -925,8 +960,8 @@ const Dashboard = React.memo(function Dashboard({
                   className="p-4 bg-[#F9FAFB] rounded-xl border border-[#E5E7EB] space-y-3"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="font-mono text-xs font-bold text-[#6B705C]">{t.id}</span>
-                    <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                    <span className="font-mono text-[13px] font-bold text-[#6B705C]">{t.id}</span>
+                    <span className={`text-[13px] font-bold uppercase px-2 py-0.5 rounded-full border ${
                       t.status === 'Open'
                         ? 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/20'
                         : 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20'
@@ -936,9 +971,9 @@ const Dashboard = React.memo(function Dashboard({
                   </div>
 
                   <div>
-                    <h5 className="font-bold text-xs text-[#1F2937] uppercase">{t.name}</h5>
-                    <p className="text-[10px] text-gray-500">{t.mobileNumber}</p>
-                    <p className="text-xs text-gray-600 mt-1.5 uppercase italic">"{t.conversationDescription}"</p>
+                    <h5 className="font-bold text-[14px] text-[#1F2937] dark:text-[#f5f5f0] uppercase">{t.name}</h5>
+                    <p className="text-[13px] text-gray-500">{t.mobileNumber}</p>
+                    <p className="text-[14px] text-gray-600 dark:text-[#C4C4B5] mt-1.5 uppercase italic">"{t.conversationDescription}"</p>
                   </div>
 
                   {customer && (
@@ -950,6 +985,7 @@ const Dashboard = React.memo(function Dashboard({
                         imoNumber={customer.imoNumber}
                         customerId={customer.id}
                         ticketId={t.id}
+                        additionalNumbers={customer.additionalNumbers}
                       />
                     </div>
                   )}
@@ -957,7 +993,7 @@ const Dashboard = React.memo(function Dashboard({
               );
             })
           ) : (
-            <div className="py-6 text-center text-gray-400 text-xs font-bold uppercase">
+            <div className="py-6 text-center text-gray-400 text-[13px] font-bold uppercase">
               NO SUPPORT TICKETS LOGGED
             </div>
           )}

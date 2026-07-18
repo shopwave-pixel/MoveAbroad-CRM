@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Customer, Ticket, FollowUp, SyncConfig, User } from './types';
+import { Customer, AdditionalNumber, Ticket, FollowUp, SyncConfig, User } from './types';
 import { 
   fetchCRMData, 
   addCustomer, 
@@ -18,6 +18,18 @@ import {
   getStoredSession,
   clearSession
 } from './utils/crmApi';
+
+import { subscribeToCache, triggerAutoSync, loadCacheAndSync, performSmartSync } from './utils/cacheManager';
+import { logCustomerActivity } from './utils/activityLogger';
+import SyncCenter from './components/SyncCenter';
+
+import { 
+  DashboardSkeleton, 
+  CustomerDirectorySkeleton, 
+  TicketsManagerSkeleton, 
+  FollowUpsSkeleton, 
+  SettingsSkeleton 
+} from './components/Skeletons';
 
 import Dashboard from './components/Dashboard';
 import CustomerSearch from './components/CustomerSearch';
@@ -46,7 +58,10 @@ import {
   Plus,
   LogOut,
   UserCheck,
-  UserPlus
+  UserPlus,
+  Sun,
+  Moon,
+  Laptop
 } from 'lucide-react';
 
 const AUTH_ENABLED = false;
@@ -82,12 +97,73 @@ export default function App() {
     };
   }, []);
 
+  // Theme support state (light, dark, system)
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
+    return (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(theme);
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (theme !== 'system') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+      const root = window.document.documentElement;
+      root.classList.remove('light', 'dark');
+      root.classList.add(mediaQuery.matches ? 'dark' : 'light');
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme]);
+
+  // Hidden Developer Mode state
+  const [isDeveloperMode, setIsDeveloperMode] = useState<boolean>(false);
+  const tapTimestamps = useRef<number[]>([]);
+
+  const handleLogoTap = () => {
+    // Only available for Admin users
+    if (effectiveUser?.role !== 'Admin') {
+      return;
+    }
+
+    const now = Date.now();
+    // Keep only taps in the last 3 seconds
+    const recentTaps = tapTimestamps.current.filter((t) => now - t <= 3000);
+    recentTaps.push(now);
+    tapTimestamps.current = recentTaps;
+
+    if (recentTaps.length >= 6) {
+      tapTimestamps.current = [];
+      setIsDeveloperMode(true);
+      window.dispatchEvent(
+        new CustomEvent('show-toast', {
+          detail: { message: '🔓 Developer Mode Enabled' }
+        })
+      );
+      // Automatically open the hidden Developer Settings page (debug view)
+      setActiveTab('debug');
+    }
+  };
+
   // Navigation & View States
   const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'tickets' | 'followups' | 'settings' | 'users' | 'debug'>('dashboard');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string>('');
   const [isAddingCustomerInline, setIsAddingCustomerInline] = useState(false);
+  const [filterSearchQuery, setFilterSearchQuery] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [genderFilter, setGenderFilter] = useState<string>('');
 
   // User Authentication & Wizard States
   const [sessionUser, setSessionUser] = useState<User | null>(null);
@@ -107,9 +183,51 @@ export default function App() {
   const [retryCountdown, setRetryCountdown] = useState<number>(30);
   const [globalSaveStatus, setGlobalSaveStatus] = useState<'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED'>('IDLE');
 
+  // Enterprise Client-Side Cache States
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [syncQueue, setSyncQueue] = useState<any[]>([]);
+  const [syncHistory, setSyncHistory] = useState<any[]>([]);
+  const [showSyncCenter, setShowSyncCenter] = useState<boolean>(false);
+
   // Status States
   const [isLoading, setIsLoading] = useState(false);
+  const [isCacheLoading, setIsCacheLoading] = useState<boolean>(true);
+  const [newlyUpdatedIds, setNewlyUpdatedIds] = useState<Set<string>>(new Set());
   const [globalError, setGlobalError] = useState<string | null>(null);
+
+  // Subscribe to central Cache Manager for live reactive sync states
+  useEffect(() => {
+    const unsubscribe = subscribeToCache((data) => {
+      setCustomers(data.customers);
+      setTickets(data.tickets);
+      setFollowUps(data.followUps);
+      setIsOnline(data.isOnline);
+      setSyncQueue(data.syncQueue);
+      setSyncHistory(data.syncHistory);
+      setLastSyncTime(data.lastSyncTime);
+      
+      if (!data.isOnline) {
+        setSyncStatus('OFFLINE');
+      } else if (data.syncStatus === 'SYNCING') {
+        setSyncStatus('SYNCING');
+      } else {
+        setSyncStatus('LIVE');
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Background refresh every 5 minutes (300,000 ms)
+  useEffect(() => {
+    if (!effectiveUser) return;
+    const interval = setInterval(() => {
+      if (config.isLiveMode && isOnline) {
+        // Run silent background refresh
+        loadCacheAndSync(config, true);
+      }
+    }, 300000);
+    return () => clearInterval(interval);
+  }, [config, effectiveUser, isOnline]);
 
   // Initialize and load configuration on startup
   useEffect(() => {
@@ -190,6 +308,59 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Pull to Refresh State & Touch Event Binding
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const startYRef = useRef(0);
+
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (window.scrollY === 0) {
+        startYRef.current = e.touches[0].clientY;
+        setIsPulling(true);
+      } else {
+        setIsPulling(false);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (startYRef.current === 0) return;
+      const currentY = e.touches[0].clientY;
+      const diff = currentY - startYRef.current;
+      
+      if (diff > 0 && window.scrollY === 0) {
+        const distance = Math.min(80, diff * 0.45);
+        setPullDistance(distance);
+        if (e.cancelable && distance > 10) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    const handleTouchEnd = async () => {
+      startYRef.current = 0;
+      setIsPulling(false);
+      
+      if (pullDistance >= 45) {
+        setPullDistance(45);
+        window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '🔄 Syncing Sheets Cache...' } }));
+        await loadCRMData(config);
+        window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: '✅ Synchronization Complete' } }));
+      }
+      setPullDistance(0);
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [pullDistance, config]);
+
   // Sync data automatically whenever config is loaded or updated and session is authenticated
   useEffect(() => {
     if (effectiveUser) {
@@ -197,29 +368,69 @@ export default function App() {
     }
   }, [config, effectiveUser]);
 
-  // Load / Sync Data helper
+  // Load / Sync Data helper with Progressive Loading Engine
   const loadCRMData = async (currentConfig: SyncConfig) => {
-    setSyncStatus('SYNCING');
-    setIsLoading(true);
     setGlobalError(null);
+    
+    // Step 1: Instantly load cached database values to prevent blank screens (<50ms)
     try {
-      const data = await fetchCRMData(currentConfig);
-      setCustomers(data.customers);
-      setTickets(data.tickets);
-      setFollowUps(data.followUps || []);
-      setSyncStatus('LIVE');
-      setLastSyncTime(new Date());
-    } catch (err: any) {
-      console.error('Data Sync Error:', err);
+      const cached = await fetchCRMData(currentConfig);
+      if (cached && (cached.customers?.length > 0 || cached.tickets?.length > 0)) {
+        setCustomers(cached.customers);
+        setTickets(cached.tickets);
+        setFollowUps(cached.followUps || []);
+        setIsCacheLoading(false); // Cache hit! Hide modular skeletons instantly
+      }
+    } catch (cacheErr) {
+      console.error('Fast cache load error:', cacheErr);
+    }
+
+    // Step 2: Start silent background comparison sync with Google Sheets
+    setSyncStatus('SYNCING'); // Render '🟡 Checking...' status label in header
+    try {
+      const syncResult = await performSmartSync(currentConfig);
+      
+      if (syncResult.success) {
+        setSyncStatus('LIVE'); // Render '🟢 Synced' status label in header
+        setLastSyncTime(new Date());
+        
+        if (syncResult.hasChanges) {
+          // Refresh list views with merged/new data (Partial Update)
+          const refreshed = await fetchCRMData(currentConfig);
+          setCustomers(refreshed.customers);
+          setTickets(refreshed.tickets);
+          setFollowUps(refreshed.followUps || []);
+
+          // Temporarily register newly updated IDs to trigger green flash hover highlights
+          if (syncResult.updatedIds && syncResult.updatedIds.length > 0) {
+            const updatedSet = new Set(syncResult.updatedIds);
+            setNewlyUpdatedIds(updatedSet);
+            setTimeout(() => {
+              setNewlyUpdatedIds(new Set());
+            }, 4000);
+
+            // Display non-intrusive toast with total updates applied
+            const totalCount = syncResult.addedCount + syncResult.updatedCount + syncResult.deletedCount;
+            window.dispatchEvent(new CustomEvent('show-toast', { 
+              detail: { message: `🔄 CRM Synced: Applied ${totalCount} partial updates.` } 
+            }));
+          }
+        }
+      } else {
+        // Handle sync failure based on internet connection
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          setSyncStatus('OFFLINE'); // Render '🟠 Offline'
+        } else {
+          setSyncStatus('CONNECTING'); // Triggers retrying flow or fails
+        }
+      }
+    } catch (syncErr: any) {
+      console.error('Silent background sync failure:', syncErr);
       setSyncStatus('OFFLINE');
       setRetryCountdown(30);
-      setGlobalError(
-        currentConfig.isLiveMode 
-          ? 'Failed to sync with Google Sheets. Please verify your Apps Script URL or network connection.' 
-          : 'Failed to load local data cache.'
-      );
     } finally {
       setIsLoading(false);
+      setIsCacheLoading(false); // Insures skeletons collapse even on empty datasets
     }
   };
 
@@ -266,12 +477,14 @@ export default function App() {
     imoNumber: string = '',
     customerCategory: string = '',
     address: string = '',
-    gender: string = ''
+    gender: string = '',
+    additionalNumbers: AdditionalNumber[] = []
   ) => {
     return wrapSave(async () => {
-      const res = await addCustomer(config, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber, customerCategory, address, gender);
+      const res = await addCustomer(config, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber, customerCategory, address, gender, additionalNumbers);
       if (res.success && res.customer) {
         setCustomers(prev => [...prev, res.customer!]);
+        logCustomerActivity(res.customer.id, effectiveUser?.fullName || 'Staff', 'Customer Created', `Profile created with primary mobile: ${mobileNumber}`);
       }
       return res;
     });
@@ -289,10 +502,11 @@ export default function App() {
     imoNumber: string = '',
     customerCategory: string = '',
     address: string = '',
-    gender: string = ''
+    gender: string = '',
+    additionalNumbers: AdditionalNumber[] = []
   ) => {
     return wrapSave(async () => {
-      const res = await updateCustomer(config, id, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber, customerCategory, address, gender);
+      const res = await updateCustomer(config, id, name, mobileNumber, whatsAppNumber, destinationCountry, source, remarks, imoNumber, customerCategory, address, gender, additionalNumbers);
       if (res.success) {
         // Sync local customers state
         setCustomers(prev => prev.map(c => c.id === id ? { 
@@ -306,7 +520,8 @@ export default function App() {
           remarks,
           customerCategory,
           address,
-          gender
+          gender,
+          additionalNumbers
         } : c));
         // Sync local tickets cache
         setTickets(prev => prev.map(t => t.customerId === id ? { ...t, name, mobileNumber } : t));
@@ -325,8 +540,11 @@ export default function App() {
           remarks,
           customerCategory,
           address,
-          gender
+          gender,
+          additionalNumbers
         } : prev);
+
+        logCustomerActivity(id, effectiveUser?.fullName || 'Staff', 'Customer Updated', `Profile details updated`);
       }
       return res;
     });
@@ -358,6 +576,7 @@ export default function App() {
       const res = await createTicket(config, customerId, name, mobileNumber, conversationDescription, status);
       if (res.success && res.ticket) {
         setTickets(prev => [...prev, res.ticket!]);
+        logCustomerActivity(customerId, effectiveUser?.fullName || 'Staff', 'Ticket Created', `Opened support ticket ${res.ticket.id}: "${conversationDescription}"`);
       }
       return res;
     });
@@ -373,7 +592,14 @@ export default function App() {
         updates.status || 'Open'
       );
       if (res.success) {
-        setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+        setTickets(prev => {
+          const currentTkt = prev.find(t => t.id === id);
+          if (currentTkt) {
+            const statusLabel = updates.status && updates.status !== currentTkt.status ? `Status Changed to ${updates.status}` : 'Ticket Updated';
+            logCustomerActivity(currentTkt.customerId, effectiveUser?.fullName || 'Staff', statusLabel, `Updated ticket ${id}: ${updates.conversationDescription || currentTkt.conversationDescription}`);
+          }
+          return prev.map(t => t.id === id ? { ...t, ...updates } : t);
+        });
       }
       return res;
     });
@@ -404,6 +630,7 @@ export default function App() {
       const res = await createFollowUp(config, customerId, name, mobileNumber, followUpDate, followUpTime, notes, status);
       if (res.success && res.followUp) {
         setFollowUps(prev => [...prev, res.followUp!]);
+        logCustomerActivity(customerId, effectiveUser?.fullName || 'Staff', 'Follow-up Added', `Scheduled follow-up ${res.followUp.id} for ${followUpDate} @ ${followUpTime}: "${notes}"`);
       }
       return res;
     });
@@ -423,6 +650,8 @@ export default function App() {
       const res = await updateFollowUp(config, id, date, time, notes, status);
       if (res.success) {
         setFollowUps(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+        const actionLabel = updates.status === 'Completed' ? 'Follow-up Completed' : 'Follow-up Updated';
+        logCustomerActivity(existing.customerId, effectiveUser?.fullName || 'Staff', actionLabel, `Follow-up ${id} updated to ${status}`);
       }
       return res;
     });
@@ -473,12 +702,15 @@ export default function App() {
     setPreselectedCustomerId('');
     setIsAddingCustomerInline(false);
     setCategoryFilter(category);
+    setFilterSearchQuery('');
+    setGenderFilter('');
     setActiveTab('customers');
   };
 
   const handleLogout = () => {
     clearSession();
     setSessionUser(null);
+    setIsDeveloperMode(false);
     setActiveTab('dashboard');
   };
 
@@ -507,11 +739,29 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-[#2c2c26] selection:bg-[#5A5A40]/20 selection:text-[#2c2c26] antialiased">
       
+      {/* Pull to Refresh Shimmer Indicator */}
+      {pullDistance > 0 && (
+        <div 
+          className="fixed left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-[#1a1a15] text-[#5A5A40] dark:text-[#ecece5] shadow-md border border-gray-100 dark:border-[#8a8a70]/10 rounded-full p-2.5 flex items-center justify-center transition-all duration-75"
+          style={{ 
+            top: `${Math.min(100, pullDistance + 10)}px`,
+            opacity: pullDistance / 45,
+            transform: `translate(-50%, -50%) rotate(${pullDistance * 6}deg) scale(${Math.min(1, pullDistance / 45)})`
+          }}
+        >
+          <RefreshCw className={`w-4 h-4 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
+        </div>
+      )}
+      
       {/* Top Main Navigation Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-[#5A5A40]/10 shadow-xs px-4 py-3">
         <div className="max-w-5xl mx-auto flex flex-col gap-2.5 sm:gap-0 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+            <div 
+              onClick={handleLogoTap} 
+              className="flex items-center gap-2.5 cursor-pointer select-none active:opacity-80 transition-opacity"
+              title="MoveAboard CRM Logo"
+            >
               <div className="w-9 h-9 rounded-xl bg-primary-olive flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm">
                 M
               </div>
@@ -563,41 +813,35 @@ export default function App() {
                 );
               }
 
-              const timeString = lastSyncTime 
-                ? (() => {
-                    const secs = Math.floor((new Date().getTime() - lastSyncTime.getTime()) / 1000);
-                    if (secs < 5) return 'JUST NOW';
-                    if (secs < 60) return `${secs}S AGO`;
-                    const mins = Math.floor(secs / 60);
-                    if (mins < 60) return `${mins}M AGO`;
-                    return lastSyncTime.toLocaleTimeString();
-                  })()
-                : 'NEVER';
+              const isCurrentlyRetrying = syncQueue.some(q => q.syncStatus === 'failed' && q.errorMessage?.includes('Retrying'));
+
+              if (isCurrentlyRetrying) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-rose-100 text-rose-800 border-rose-200 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping"></span>
+                    <span>🔴 SYNC FAILED</span>
+                  </span>
+                );
+              }
 
               switch (syncStatus) {
                 case 'CONNECTING':
-                  return (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-slate-100 text-slate-700 border-slate-200 animate-pulse">
-                      <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                      <span>⚪ CONNECTING...</span>
-                    </span>
-                  );
                 case 'SYNCING':
                   return (
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-amber-100 text-amber-800 border-amber-200">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-                      <span>🟡 SYNCING...</span>
+                      <span>🟡 CHECKING...</span>
                     </span>
                   );
                 case 'OFFLINE':
                   return (
                     <span 
                       onClick={() => loadCRMData(config)}
-                      title={`Offline. Retrying in ${retryCountdown}s. Click to retry.`}
-                      className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-rose-100 text-rose-800 border-rose-200 cursor-pointer animate-pulse"
+                      title="Offline. Click to retry sync."
+                      className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-orange-100 text-orange-800 border-orange-200 cursor-pointer animate-pulse"
                     >
-                      <span className="w-2 h-2 rounded-full bg-rose-600"></span>
-                      <span>🔴 OFFLINE (RETRY IN {retryCountdown}S)</span>
+                      <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
+                      <span>🟠 OFFLINE</span>
                     </span>
                   );
                 case 'LIVE':
@@ -605,20 +849,54 @@ export default function App() {
                   return (
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-200">
                       <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></span>
-                      <span>🟢 LIVE (SYNCED: {timeString})</span>
+                      <span>🟢 SYNCED</span>
                     </span>
                   );
               }
             })()}
 
-            {/* Force sync action button */}
+            {/* Theme Selector (Light, Dark, System) */}
+            <div className="flex items-center bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl border border-gray-200 dark:border-zinc-700 select-none shrink-0" id="theme-selector">
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                title="Light Mode"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center ${theme === 'light' ? 'bg-white text-amber-500 shadow-xs' : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'}`}
+              >
+                <Sun className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                title="Dark Mode"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center ${theme === 'dark' ? 'bg-zinc-700 text-amber-400 shadow-xs' : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'}`}
+              >
+                <Moon className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('system')}
+                title="System Mode"
+                className={`p-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center ${theme === 'system' ? 'bg-white dark:bg-zinc-700 text-primary-olive dark:text-zinc-200 shadow-xs' : 'text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300'}`}
+              >
+                <Laptop className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Sync Center Trigger Button with Queue Size Badge */}
             <button
-              onClick={handleManualSync}
-              disabled={isLoading}
-              title="Force Sync Now"
-              className="p-1.5 text-primary-olive/75 hover:text-primary-olive hover:bg-primary-olive/5 rounded-xl border border-primary-olive/10 active:scale-95 transition-all cursor-pointer h-[32px] w-[32px] flex items-center justify-center shrink-0"
+              onClick={() => setShowSyncCenter(true)}
+              title="Open Sync Center"
+              className="relative p-1.5 text-primary-olive/75 hover:text-primary-olive hover:bg-primary-olive/5 rounded-xl border border-primary-olive/10 active:scale-95 transition-all cursor-pointer h-[32px] flex items-center gap-1 px-2.5 shrink-0"
+              id="header-sync-center-btn"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
+              <span className="text-[10px] font-bold">Sync Center</span>
+              {syncQueue.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                  {syncQueue.length}
+                </span>
+              )}
             </button>
 
             {effectiveUser && (
@@ -690,24 +968,29 @@ export default function App() {
             
             {/* 1. Dashboard View */}
             {activeTab === 'dashboard' && (
-              <Dashboard
-                customers={customers}
-                tickets={tickets}
-                followUps={followUps}
-                onNavigate={handleTabNavigation}
-                onSelectCustomer={handleSelectCustomer}
-                onQuickAddCustomer={() => {
-                  setSelectedCustomer(null);
-                  setActiveTab('customers');
-                  setIsAddingCustomerInline(true);
-                }}
-                onQuickAddTicket={() => {
-                  setSelectedCustomer(null);
-                  setActiveTab('tickets');
-                }}
-                currentUser={effectiveUser}
-                onCategorySelect={handleCategorySelect}
-              />
+              isCacheLoading ? (
+                <DashboardSkeleton />
+              ) : (
+                <Dashboard
+                  customers={customers}
+                  tickets={tickets}
+                  followUps={followUps}
+                  onNavigate={handleTabNavigation}
+                  onSelectCustomer={handleSelectCustomer}
+                  onQuickAddCustomer={() => {
+                    setSelectedCustomer(null);
+                    setActiveTab('customers');
+                    setIsAddingCustomerInline(true);
+                  }}
+                  onQuickAddTicket={() => {
+                    setSelectedCustomer(null);
+                    setActiveTab('tickets');
+                  }}
+                  currentUser={effectiveUser}
+                  onCategorySelect={handleCategorySelect}
+                  newlyUpdatedIds={newlyUpdatedIds}
+                />
+              )
             )}
 
             {/* 2. Customers Directory View */}
@@ -739,7 +1022,9 @@ export default function App() {
                   </button>
                 </div>
 
-                {isAddingCustomerInline ? (
+                {isCacheLoading ? (
+                  <CustomerDirectorySkeleton />
+                ) : isAddingCustomerInline ? (
                   <div className="w-full max-w-[700px] md:w-[90%] mx-auto px-4 sm:px-5">
                     <CustomerForm
                       onAddCustomer={handleAddCustomer}
@@ -753,8 +1038,15 @@ export default function App() {
                     followUps={followUps}
                     onSelectCustomer={handleSelectCustomer}
                     onNavigateToAddCustomer={() => setIsAddingCustomerInline(true)}
+                    searchQuery={filterSearchQuery}
+                    onSearchQueryChange={setFilterSearchQuery}
                     categoryFilter={categoryFilter}
                     onCategoryFilterChange={setCategoryFilter}
+                    genderFilter={genderFilter}
+                    onGenderFilterChange={setGenderFilter}
+                    onAddTicket={handleStartTicketForCustomer}
+                    isLoading={isLoading}
+                    newlyUpdatedIds={newlyUpdatedIds}
                   />
                 )}
               </div>
@@ -763,43 +1055,56 @@ export default function App() {
             {/* 3. Support Tickets Manager View */}
             {activeTab === 'tickets' && (
               <div className="max-w-4xl mx-auto">
-                <TicketsManager
-                  customers={customers}
-                  tickets={tickets}
-                  followUps={followUps}
-                  onAddCustomer={handleAddCustomer}
-                  onCreateTicket={handleCreateTicket}
-                  onUpdateTicket={handleUpdateTicket}
-                  onDeleteTicket={handleDeleteTicket}
-                  preselectedCustomerId={preselectedCustomerId}
-                />
+                {isCacheLoading ? (
+                  <TicketsManagerSkeleton />
+                ) : (
+                  <TicketsManager
+                    customers={customers}
+                    tickets={tickets}
+                    followUps={followUps}
+                    onAddCustomer={handleAddCustomer}
+                    onCreateTicket={handleCreateTicket}
+                    onUpdateTicket={handleUpdateTicket}
+                    onDeleteTicket={handleDeleteTicket}
+                    preselectedCustomerId={preselectedCustomerId}
+                  />
+                )}
               </div>
             )}
 
             {/* 4. Follow-up Tasks view */}
             {activeTab === 'followups' && (
               <div className="max-w-4xl mx-auto">
-                <FollowUps
-                  customers={customers}
-                  followUps={followUps}
-                  tickets={tickets}
-                  onCreateFollowUp={handleCreateFollowUp}
-                  onUpdateFollowUp={handleUpdateFollowUp}
-                  onDeleteFollowUp={handleDeleteFollowUp}
-                />
+                {isCacheLoading ? (
+                  <FollowUpsSkeleton />
+                ) : (
+                  <FollowUps
+                    customers={customers}
+                    followUps={followUps}
+                    tickets={tickets}
+                    onCreateFollowUp={handleCreateFollowUp}
+                    onUpdateFollowUp={handleUpdateFollowUp}
+                    onDeleteFollowUp={handleDeleteFollowUp}
+                  />
+                )}
               </div>
             )}
 
              {/* 5. Settings Configuration View */}
             {activeTab === 'settings' && (
               <div className="max-w-3xl mx-auto">
-                <SettingsPanel
-                  config={config}
-                  onUpdateConfig={handleUpdateConfig}
-                  onRefreshData={handleManualSync}
-                  isLoading={isLoading}
-                  onOpenDebug={effectiveUser?.role === 'Admin' ? () => setActiveTab('debug') : undefined}
-                />
+                {isCacheLoading ? (
+                  <SettingsSkeleton />
+                ) : (
+                  <SettingsPanel
+                    config={config}
+                    onUpdateConfig={handleUpdateConfig}
+                    onRefreshData={handleManualSync}
+                    isLoading={isLoading}
+                    isDeveloperMode={isDeveloperMode}
+                    onOpenDebug={(effectiveUser?.role === 'Admin' && isDeveloperMode) ? () => setActiveTab('debug') : undefined}
+                  />
+                )}
               </div>
             )}
 
@@ -814,7 +1119,7 @@ export default function App() {
             )}
 
             {/* 7. Admin Debug & Diagnostics View */}
-            {activeTab === 'debug' && effectiveUser?.role === 'Admin' && (
+            {activeTab === 'debug' && effectiveUser?.role === 'Admin' && isDeveloperMode && (
               <div className="max-w-4xl mx-auto">
                 <AdminDebug
                   config={config}
@@ -944,6 +1249,18 @@ export default function App() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Sync Center Sidebar Panel */}
+      <SyncCenter
+        isOpen={showSyncCenter}
+        onClose={() => setShowSyncCenter(false)}
+        syncQueue={syncQueue}
+        isOnline={isOnline}
+        syncStatus={syncStatus}
+        lastSyncTime={lastSyncTime}
+        syncHistory={syncHistory}
+        config={config}
+      />
     </div>
   );
 }

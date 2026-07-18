@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, FollowUp, Ticket } from '../types';
+import SuccessCheckmark from './SuccessCheckmark';
 import SmartGlobalSearch from './SmartGlobalSearch';
 import SmartContactActions from './SmartContactActions';
 import SearchableCustomerDropdown from './SearchableCustomerDropdown';
@@ -299,7 +300,7 @@ const FollowUps = React.memo(function FollowUps({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] tracking-tight">Follow-up Management</h2>
-          <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]">Schedule callbacks, status reviews, and customer check-ins</p>
+          <p className="text-[13px] text-[#5A5A40]/60 dark:text-[#8a8a70]">Schedule callbacks, status reviews, and customer check-ins</p>
         </div>
         <button
           onClick={() => {
@@ -309,7 +310,7 @@ const FollowUps = React.memo(function FollowUps({
             }
           }}
           id="btn-toggle-add-followup"
-          className="inline-flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white font-medium text-xs px-4 py-2 rounded-full shadow-lg shadow-[#5A5A40]/10 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white font-medium text-[13px] px-4 py-2 rounded-full shadow-lg shadow-[#5A5A40]/10 transition-colors cursor-pointer"
         >
           {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           {isAdding ? 'Close' : 'Schedule'}
@@ -318,21 +319,20 @@ const FollowUps = React.memo(function FollowUps({
 
       {/* Global Status Alerts */}
       {actionStatus.type === 'error' && (
-        <div id="followup-alert-error" className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40 rounded-2xl flex items-start gap-2.5 text-xs text-rose-800 dark:text-rose-300 leading-tight">
+        <div id="followup-alert-error" className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/40 rounded-2xl flex items-start gap-2.5 text-[13px] text-rose-800 dark:text-rose-300 leading-tight">
           <AlertCircle className="w-4.5 h-4.5 shrink-0 text-rose-500 mt-0.5" />
           <span>{actionStatus.message}</span>
         </div>
       )}
 
       {actionStatus.type === 'success' && (
-        <div id="followup-alert-success" className="p-3.5 bg-[#5A5A40]/10 dark:bg-[#5A5A40]/20 border border-[#5A5A40]/20 dark:border-[#8a8a70]/30 rounded-2xl flex items-start gap-2.5 text-xs text-[#5A5A40] dark:text-[#ecece5] leading-tight">
-          <CheckCircle2 className="w-4.5 h-4.5 shrink-0 text-[#5A5A40] dark:text-[#ecece5] mt-0.5" />
-          <span>{actionStatus.message}</span>
+        <div id="followup-alert-success" className="p-4 bg-emerald-50/50 dark:bg-[#1b3a24]/10 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl flex flex-col items-center justify-center">
+          <SuccessCheckmark size={36} message={actionStatus.message} />
         </div>
       )}
 
       {actionStatus.type === 'loading' && (
-        <div id="followup-alert-loading" className="p-3.5 bg-[#5A5A40]/5 dark:bg-[#5A5A40]/10 border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 rounded-2xl flex items-start gap-2.5 text-xs text-[#5A5A40]/85 dark:text-[#ecece5]/80 leading-tight">
+        <div id="followup-alert-loading" className="p-3.5 bg-[#5A5A40]/5 dark:bg-[#5A5A40]/10 border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 rounded-2xl flex items-start gap-2.5 text-[13px] text-[#5A5A40]/85 dark:text-[#ecece5]/80 leading-tight">
           <Loader2 className="w-4.5 h-4.5 shrink-0 text-[#5A5A40] dark:text-[#ecece5] animate-spin mt-0.5" />
           <span>{actionStatus.message}</span>
         </div>
@@ -350,7 +350,7 @@ const FollowUps = React.memo(function FollowUps({
             
             {/* Customer Selector */}
             <div className="space-y-3">
-              <label className="block text-xs font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70]">
+              <label className="block text-[13px] font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70]">
                 Customer <span className="text-rose-500">*</span>
               </label>
               <SearchableCustomerDropdown
@@ -364,7 +364,7 @@ const FollowUps = React.memo(function FollowUps({
                 const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
                 if (!selectedCustomer) {
                   return (
-                    <div className="p-3.5 bg-[#f5f5f0]/35 dark:bg-[#151510]/30 border border-dashed border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-2xl text-center text-xs text-[#5A5A40]/60 dark:text-[#8a8a70] italic">
+                    <div className="p-3.5 bg-[#f5f5f0]/35 dark:bg-[#151510]/30 border border-dashed border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-2xl text-center text-[13px] text-[#5A5A40]/60 dark:text-[#8a8a70] italic">
                       Please use the search box above to select a customer.
                     </div>
                   );
@@ -396,40 +396,40 @@ const FollowUps = React.memo(function FollowUps({
                     {/* Customer Details Header */}
                     <div className="flex items-start justify-between gap-2 border-b border-[#5A5A40]/10 dark:border-[#8a8a70]/25 pb-3">
                       <div>
-                        <span className="text-[10px] font-bold text-[#5A5A40]/60 uppercase tracking-wider block">Selected Customer</span>
+                        <span className="text-[13px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase tracking-wider block">Selected Customer</span>
                         <h4 className="font-serif font-bold text-sm text-[#2c2c26] dark:text-[#ecece5] flex items-center gap-1.5 mt-0.5">
                           <span>👤</span> {selectedCustomer.name}
                         </h4>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[#5A5A40]/80 dark:text-[#8a8a70]">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[13px] text-[#5A5A40]/80 dark:text-[#8a8a70]">
                           <span className="flex items-center gap-1 font-semibold">📱 {selectedCustomer.mobileNumber}</span>
                           {selectedCustomer.destinationCountry && (
                             <span className="flex items-center gap-1">🌍 {selectedCustomer.destinationCountry}</span>
                           )}
                         </div>
                       </div>
-                      <span className="font-mono text-[9px] bg-white dark:bg-[#1a1a15] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 px-2 py-0.5 rounded text-[#5A5A40] dark:text-[#b8b89e] font-bold">
+                      <span className="font-mono text-[13px] bg-white dark:bg-[#1a1a15] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 px-2 py-0.5 rounded text-[#5A5A40] dark:text-[#b8b89e] font-bold">
                         🆔 {selectedCustomer.id}
                       </span>
                     </div>
 
                     {/* Timeline Area */}
                     <div>
-                      <span className="text-[10px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase tracking-wider block mb-2">
+                      <span className="text-[13px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase tracking-wider block mb-2">
                         Activity & Conversation History
                       </span>
                       {timelineItems.length > 0 ? (
                         <div className="space-y-3">
                           {/* Latest Item Highlight */}
-                          <div className="p-3 bg-white dark:bg-[#20201a] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 rounded-xl text-xs space-y-1 shadow-2xs">
+                          <div className="p-3 bg-white dark:bg-[#20201a] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 rounded-xl text-[13px] space-y-1 shadow-2xs">
                             <div className="flex items-center justify-between">
-                              <span className={`font-bold uppercase text-[9px] px-2 py-0.5 rounded-full ${
+                              <span className={`font-bold uppercase text-[13px] px-2 py-0.5 rounded-full ${
                                 timelineItems[0].type === 'ticket' 
                                   ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400' 
                                   : 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400'
                               }`}>
                                 {timelineItems[0].type === 'ticket' ? '🎫 Latest Support Ticket' : '📅 Latest Follow-up'}
                               </span>
-                              <span className="text-[10px] font-mono text-[#5A5A40]/60 dark:text-[#8a8a70]">
+                              <span className="text-[13px] font-mono text-[#5A5A40]/60 dark:text-[#8a8a70]">
                                 {new Date(timelineItems[0].date).toLocaleDateString()}
                               </span>
                             </div>
@@ -440,13 +440,13 @@ const FollowUps = React.memo(function FollowUps({
                           {/* Full Scrollable Conversation History */}
                           {timelineItems.length > 1 && (
                             <div className="border-t border-[#5A5A40]/5 dark:border-[#8a8a70]/10 pt-3">
-                              <span className="text-[10px] font-bold text-[#5A5A40]/50 dark:text-[#8a8a70]/70 uppercase tracking-wider block mb-2">
+                              <span className="text-[13px] font-bold text-[#5A5A40]/50 dark:text-[#8a8a70]/70 uppercase tracking-wider block mb-2">
                                 Past History ({timelineItems.length} records)
                               </span>
                               <div className="max-h-36 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
                                 {timelineItems.slice(1).map((item, index) => (
-                                  <div key={index} className="pl-3 border-l-2 border-[#5A5A40]/15 dark:border-[#8a8a70]/30 space-y-0.5 text-[11px]">
-                                    <div className="flex items-center gap-1.5 text-[10px] text-[#5A5A40]/60 dark:text-[#8a8a70]/80 font-bold">
+                                  <div key={index} className="pl-3 border-l-2 border-[#5A5A40]/15 dark:border-[#8a8a70]/30 space-y-0.5 text-[13px]">
+                                    <div className="flex items-center gap-1.5 text-[13px] text-[#5A5A40]/60 dark:text-[#8a8a70]/80 font-bold">
                                       <span>{item.type === 'ticket' ? '🎫' : '📅'}</span>
                                       <span>{new Date(item.date).toLocaleDateString()}</span>
                                       <span>•</span>
@@ -460,7 +460,7 @@ const FollowUps = React.memo(function FollowUps({
                           )}
                         </div>
                       ) : (
-                        <div className="p-3 bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-dashed border-[#5A5A40]/15 dark:border-[#8a8a70]/25 rounded-xl text-center text-[11px] text-[#5A5A40]/55 dark:text-[#8a8a70] italic">
+                        <div className="p-3 bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-dashed border-[#5A5A40]/15 dark:border-[#8a8a70]/25 rounded-xl text-center text-[13px] text-[#5A5A40]/55 dark:text-[#8a8a70] italic">
                           No historical activity or tickets logged yet for this customer.
                         </div>
                       )}
@@ -473,7 +473,7 @@ const FollowUps = React.memo(function FollowUps({
             {/* Date & Time Grid */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="followup-date" className="block text-xs font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70] mb-1.5">
+                <label htmlFor="followup-date" className="block text-[13px] font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70] mb-1.5">
                   Follow-up Date <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative font-mono">
@@ -481,7 +481,7 @@ const FollowUps = React.memo(function FollowUps({
                     type="date"
                     id="followup-date"
                     required
-                    className="w-full text-xs bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-[#5A5A40] focus:bg-white dark:focus:bg-[#1e1e18] text-[#2c2c26] dark:text-[#f5f5f0] transition-all"
+                    className="w-full text-[13px] bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-[#5A5A40] focus:bg-white dark:focus:bg-[#1e1e18] text-[#2c2c26] dark:text-[#f5f5f0] transition-all font-bold"
                     value={followUpDate}
                     onChange={(e) => setFollowUpDate(e.target.value)}
                   />
@@ -489,7 +489,7 @@ const FollowUps = React.memo(function FollowUps({
               </div>
 
               <div>
-                <label htmlFor="followup-time" className="block text-xs font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70] mb-1.5">
+                <label htmlFor="followup-time" className="block text-[13px] font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70] mb-1.5">
                   Time <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative font-mono">
@@ -497,7 +497,7 @@ const FollowUps = React.memo(function FollowUps({
                     type="time"
                     id="followup-time"
                     required
-                    className="w-full text-xs bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-[#5A5A40] focus:bg-white dark:focus:bg-[#1e1e18] text-[#2c2c26] dark:text-[#f5f5f0] transition-all"
+                    className="w-full text-[13px] bg-[#f5f5f0]/50 dark:bg-[#151510]/50 border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-[#5A5A40] focus:bg-white dark:focus:bg-[#1e1e18] text-[#2c2c26] dark:text-[#f5f5f0] transition-all font-bold"
                     value={followUpTime}
                     onChange={(e) => setFollowUpTime(e.target.value)}
                   />
@@ -507,7 +507,7 @@ const FollowUps = React.memo(function FollowUps({
 
             {/* Task Description Notes */}
             <div>
-              <label htmlFor="followup-notes" className="block text-xs font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70] mb-1.5">
+              <label htmlFor="followup-notes" className="block text-[13px] font-semibold text-[#5A5A40]/85 dark:text-[#8a8a70] mb-1.5">
                 Notes / Reminder Objective <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
@@ -561,7 +561,7 @@ const FollowUps = React.memo(function FollowUps({
                   setReschedulingId(null);
                   setDeletingId(null);
                 }}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl text-center transition-all cursor-pointer ${
+                className={`flex-1 py-2.5 text-[13px] font-bold rounded-xl text-center transition-all cursor-pointer ${
                   isActive 
                     ? 'bg-white dark:bg-[#20201a] text-[#5A5A40] dark:text-[#ecece5] shadow-xs' 
                     : 'text-[#2c2c26]/60 dark:text-[#8a8a70]/60 hover:text-[#2c2c26] dark:hover:text-[#ecece5]'
@@ -616,12 +616,12 @@ const FollowUps = React.memo(function FollowUps({
                           <div className="flex flex-wrap items-center gap-1">
                             <h4 className="font-serif font-bold text-sm text-[#1F2937] dark:text-[#ecece5] uppercase" id={`followup-name-${f.id}`}>{f.name}</h4>
                             <InlineCopy type="name" value={f.name} className="min-w-[24px] min-h-[24px] p-0.5" />
-                            <span className="font-mono text-[8px] font-bold text-gray-500 bg-gray-100 dark:bg-[#151510] px-1.5 py-0.2 rounded-md">
+                            <span className="font-mono text-[13px] font-bold text-gray-500 dark:text-[#8a8a70] bg-gray-100 dark:bg-[#151510] px-1.5 py-0.5 rounded-md">
                               CID: {f.customerId}
                             </span>
                             <InlineCopy type="customerId" value={f.customerId} className="min-w-[20px] min-h-[20px] p-0" />
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-[#5A5A40]/75 dark:text-[#8a8a70]">
+                          <div className="flex items-center gap-2 text-[13px] text-[#5A5A40]/75 dark:text-[#8a8a70]">
                             <span className="flex items-center gap-1">
                               <Phone className="w-3.5 h-3.5 text-[#5A5A40]/40" />
                               <a href={`tel:${f.mobileNumber}`} className="hover:underline text-[#5A5A40] dark:text-[#b8b89e] font-semibold">{f.mobileNumber}</a>
@@ -630,7 +630,7 @@ const FollowUps = React.memo(function FollowUps({
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-1.5 text-right font-mono text-[10px]">
+                        <div className="flex flex-col items-end gap-1.5 text-right font-mono text-[13px]">
                           <span className="inline-flex items-center gap-1 font-bold text-[#5A5A40] dark:text-[#ecece5] bg-[#f5f5f0] dark:bg-[#151510] border border-[#5A5A40]/10 dark:border-[#8a8a70]/20 px-1.5 py-0.5 rounded-md shrink-0">
                             {f.id}
                             <InlineCopy type="ticketId" value={f.id} className="min-w-[20px] min-h-[20px] p-0" />
@@ -649,8 +649,8 @@ const FollowUps = React.memo(function FollowUps({
                         {isEditing ? (
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold text-[#5A5A40]/60 uppercase">EDIT FOLLOW-UP NOTES</span>
-                              <span className="text-[9px] font-bold uppercase tracking-wider">
+                              <span className="text-[13px] font-bold text-[#5A5A40]/60 dark:text-[#8a8a70] uppercase">EDIT FOLLOW-UP NOTES</span>
+                              <span className="text-[13px] font-bold uppercase tracking-wider">
                                 {followupSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
                                 {followupSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
                                 {followupSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
@@ -658,7 +658,7 @@ const FollowUps = React.memo(function FollowUps({
                               </span>
                             </div>
                             <textarea
-                              className="w-full text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-primary-olive text-[#2c2c26] dark:text-[#f5f5f0] font-sans"
+                              className="w-full text-[13px] bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-primary-olive text-[#2c2c26] dark:text-[#f5f5f0] font-sans"
                               rows={3}
                               value={editNotes}
                               onChange={(e) => setEditNotes(e.target.value)}
@@ -667,14 +667,14 @@ const FollowUps = React.memo(function FollowUps({
                             <div className="flex items-center gap-2 justify-end">
                               <button
                                 onClick={() => setEditingId(null)}
-                                className="px-4 py-1.5 text-[10px] font-bold bg-[#5A5A40] text-white rounded-md cursor-pointer uppercase"
+                                className="px-4 py-1.5 text-[13px] font-bold bg-[#5A5A40] text-white rounded-md cursor-pointer uppercase"
                               >
                                 Done Editing
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <p className="text-xs text-[#2c2c26]/90 dark:text-[#ecece5] whitespace-pre-wrap leading-relaxed break-words italic font-sans">
+                          <p className="text-[13px] text-[#2c2c26]/90 dark:text-[#ecece5] whitespace-pre-wrap leading-relaxed break-words italic font-sans">
                             "{f.notes}"
                           </p>
                         )}
@@ -699,19 +699,19 @@ const FollowUps = React.memo(function FollowUps({
                       {/* Rescheduling Form Inline */}
                       {isRescheduling && (
                         <div className="p-3 border border-amber-200 dark:border-amber-900/40 bg-amber-50/20 rounded-xl space-y-3 font-mono animate-fade-in">
-                          <span className="text-[10px] font-bold text-amber-950 dark:text-amber-400 uppercase block">Reschedule Follow-up</span>
+                          <span className="text-[13px] font-bold text-amber-950 dark:text-amber-400 uppercase block">Reschedule Follow-up</span>
                           <div className="grid grid-cols-2 gap-2">
                             <input
                               type="date"
                               required
-                              className="text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
+                              className="text-[13px] bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
                               value={rescheduleDate}
                               onChange={(e) => setRescheduleDate(e.target.value)}
                             />
                             <input
                               type="time"
                               required
-                              className="text-xs bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
+                              className="text-[13px] bg-white dark:bg-[#20201a] border border-[#5A5A40]/15 dark:border-[#8a8a70]/30 rounded-lg p-2 focus:outline-none text-[#2c2c26] dark:text-[#f5f5f0]"
                               value={rescheduleTime}
                               onChange={(e) => setRescheduleTime(e.target.value)}
                             />
@@ -719,13 +719,13 @@ const FollowUps = React.memo(function FollowUps({
                           <div className="flex items-center gap-2 justify-end">
                             <button
                               onClick={() => setReschedulingId(null)}
-                              className="px-2.5 py-1 text-[10px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
+                              className="px-2.5 py-1 text-[13px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
                             >
                               Cancel
                             </button>
                             <button
                               onClick={() => handleSaveReschedule(f.id)}
-                              className="px-3 py-1 text-[10px] font-bold bg-[#F97316] text-white rounded-md hover:bg-opacity-90"
+                              className="px-3 py-1 text-[13px] font-bold bg-[#F97316] text-white rounded-md hover:bg-opacity-90"
                             >
                               Reschedule
                             </button>
@@ -736,18 +736,18 @@ const FollowUps = React.memo(function FollowUps({
                       {/* Confirmation Dialog Inline for Deletion */}
                       {isConfirmDeleting && (
                         <div className="p-3 border border-rose-200 dark:border-rose-900/40 bg-rose-50/45 dark:bg-rose-950/10 rounded-xl space-y-2 animate-fade-in">
-                          <p className="text-xs font-semibold text-rose-950 dark:text-rose-300">Are you absolutely sure you want to delete this follow-up?</p>
-                          <p className="text-[10px] text-rose-800 dark:text-rose-400 leading-normal">This action is irreversible and will remove the record permanently.</p>
+                          <p className="text-[13px] font-semibold text-rose-950 dark:text-rose-300">Are you absolutely sure you want to delete this follow-up?</p>
+                          <p className="text-[13px] text-rose-800 dark:text-rose-400 leading-normal">This action is irreversible and will remove the record permanently.</p>
                           <div className="flex items-center gap-2 justify-end">
                             <button
                               onClick={() => setDeletingId(null)}
-                              className="px-2.5 py-1 text-[10px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
+                              className="px-2.5 py-1 text-[13px] font-bold text-[#2c2c26]/60 dark:text-[#ecece5]/60 border border-[#2c2c26]/10 dark:border-white/10 rounded-md"
                             >
                               Cancel
                             </button>
                             <button
                               onClick={() => handleDelete(f.id)}
-                              className="px-3 py-1 text-[10px] font-bold bg-rose-600 text-white rounded-md hover:bg-rose-700"
+                              className="px-3 py-1 text-[13px] font-bold bg-rose-600 text-white rounded-md hover:bg-rose-700"
                             >
                               Delete Permanently
                             </button>
@@ -757,7 +757,7 @@ const FollowUps = React.memo(function FollowUps({
 
                       {/* Footer row of card: Action buttons */}
                       <div className="flex items-center justify-between pt-2.5 border-t border-[#f5f5f0] dark:border-[#151510]">
-                        <span className="text-[9px] text-[#5A5A40]/55 dark:text-[#8a8a70] uppercase font-bold tracking-wider">
+                        <span className="text-[13px] text-[#5A5A40]/55 dark:text-[#8a8a70] uppercase font-bold tracking-wider">
                           Created: {new Date(f.createdAt || '').toLocaleDateString()}
                         </span>
                         
@@ -776,7 +776,7 @@ const FollowUps = React.memo(function FollowUps({
                           )}
 
                           {f.status === 'Completed' && (
-                            <span className="text-[10px] text-emerald-600 font-semibold italic flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/10 px-2 py-0.5 rounded-md">
+                            <span className="text-[13px] text-emerald-600 font-semibold italic flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/10 px-2 py-0.5 rounded-md">
                               ✓ Completed
                             </span>
                           )}
@@ -794,7 +794,7 @@ const FollowUps = React.memo(function FollowUps({
                   <button
                     type="button"
                     onClick={() => setVisibleCount(prev => prev + 20)}
-                    className="px-6 py-2.5 text-xs font-bold rounded-full bg-[#5A5A40] text-white hover:bg-opacity-90 transition-all cursor-pointer shadow-sm uppercase tracking-wider animate-fade-in"
+                    className="px-6 py-2.5 text-[13px] font-bold rounded-full bg-[#5A5A40] text-white hover:bg-opacity-90 transition-all cursor-pointer shadow-sm uppercase tracking-wider animate-fade-in"
                   >
                     Show More Tasks (showing {visibleCount} of {filteredFollowUps.length})
                   </button>
@@ -808,7 +808,7 @@ const FollowUps = React.memo(function FollowUps({
               </div>
               <div>
                 <h4 className="font-serif font-bold text-[#5A5A40] dark:text-[#ecece5] text-sm">No follow-ups logged</h4>
-                <p className="text-xs text-[#5A5A40]/60 dark:text-[#8a8a70]/80 mt-1 max-w-xs mx-auto">
+                <p className="text-[13px] text-[#5A5A40]/60 dark:text-[#8a8a70]/80 mt-1 max-w-xs mx-auto">
                   {activeTab === 'today' 
                     ? "Hooray! No urgent follow-ups scheduled for today." 
                     : activeTab === 'upcoming' 
@@ -819,7 +819,7 @@ const FollowUps = React.memo(function FollowUps({
               {activeTab !== 'completed' && (
                 <button
                   onClick={() => setIsAdding(true)}
-                  className="inline-flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white font-medium text-xs px-5 py-2.5 rounded-full shadow-lg shadow-[#5A5A40]/10 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#4a4a34] dark:bg-[#5A5A40] dark:hover:bg-[#6c6c4e] text-white font-medium text-[13px] px-5 py-2.5 rounded-full shadow-lg shadow-[#5A5A40]/10 transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Schedule One Now

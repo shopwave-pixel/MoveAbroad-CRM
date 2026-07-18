@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Customer } from '../types';
-import { AlignLeft, Search, MapPin } from 'lucide-react';
+import { Customer, AdditionalNumber } from '../types';
+import { AlignLeft, Search, MapPin, Plus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Button, 
@@ -22,7 +22,8 @@ interface CustomerFormProps {
     imoNumber?: string,
     customerCategory?: string,
     address?: string,
-    gender?: string
+    gender?: string,
+    additionalNumbers?: AdditionalNumber[]
   ) => Promise<{ success: boolean; customer?: Customer; error?: string }>;
   existingCustomers: Customer[];
 }
@@ -30,6 +31,21 @@ interface CustomerFormProps {
 export default function CustomerForm({ onAddCustomer, existingCustomers }: CustomerFormProps) {
   const [name, setName] = useState('');
   const [mobileNumberSuffix, setMobileNumberSuffix] = useState('');
+  const [additionalNumbers, setAdditionalNumbers] = useState<{ id: string; suffix: string }[]>([]);
+
+  const handleAddAdditionalNumberField = () => {
+    const id = `AN-TEMP-${Math.floor(100000 + Math.random() * 900000)}`;
+    setAdditionalNumbers(prev => [...prev, { id, suffix: '' }]);
+  };
+
+  const handleRemoveAdditionalNumberField = (id: string) => {
+    setAdditionalNumbers(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleAdditionalNumberChange = (id: string, value: string) => {
+    setAdditionalNumbers(prev => prev.map(item => item.id === id ? { ...item, suffix: value } : item));
+  };
+
   const [whatsAppNumberSuffix, setWhatsAppNumberSuffix] = useState('');
   const [isSameAsMobile, setIsSameAsMobile] = useState(false);
   const [imoNumberSuffix, setImoNumberSuffix] = useState('');
@@ -99,6 +115,8 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
     type: 'idle',
     message: ''
   });
+  const [isSavingLocal, setIsSavingLocal] = useState(false);
+  const [isSavedLocal, setIsSavedLocal] = useState(false);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -179,6 +197,35 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
       hasValidationError = true;
     }
 
+    // Validate and check duplicate numbers within the same customer
+    const suffixesSeen = new Set<string>();
+    if (digitsOnlyMobile) {
+      suffixesSeen.add(digitsOnlyMobile);
+    }
+
+    let invalidFormatFound = false;
+    let duplicateFoundInside = false;
+
+    for (const addNum of additionalNumbers) {
+      const s = addNum.suffix.trim();
+      const digits = s.replace(/\D/g, '');
+      if (!s || digits.length < 9) {
+        invalidFormatFound = true;
+      }
+      if (suffixesSeen.has(digits)) {
+        duplicateFoundInside = true;
+      }
+      suffixesSeen.add(digits);
+    }
+
+    if (invalidFormatFound) {
+      setMobileError('VALID MOBILE NUMBER REQUIRED FOR ALL FIELDS');
+      hasValidationError = true;
+    } else if (duplicateFoundInside) {
+      setMobileError('DUPLICATE MOBILE NUMBERS FOUND FOR THIS CUSTOMER');
+      hasValidationError = true;
+    }
+
     if (hasValidationError) {
       return;
     }
@@ -188,17 +235,39 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
     const formattedWhatsApp = cleanWhatsAppSuffix ? formatPhoneNumber(cleanWhatsAppSuffix) : '';
     const formattedImo = cleanImoSuffix ? formatPhoneNumber(cleanImoSuffix) : '';
 
-    // Client-side quick duplicate check before submitting
-    const digitsOnlyInput = formattedMobile.replace(/\D/g, '');
-    const isDuplicate = existingCustomers.some(c => c.mobileNumber.replace(/\D/g, '') === digitsOnlyInput);
-    if (isDuplicate) {
-      setMobileError('A CUSTOMER WITH THIS MOBILE NUMBER ALREADY EXISTS');
+    // Check database duplicates
+    const allNormalizedInputNumbers = Array.from(suffixesSeen).map(suffix => `+880${suffix}`);
+    let existsInDb = false;
+    for (const num of allNormalizedInputNumbers) {
+      const digits = num.replace(/\D/g, '');
+      const duplicateCustomer = existingCustomers.find(c => {
+        const mainDigits = c.mobileNumber.replace(/\D/g, '');
+        if (mainDigits === digits) return true;
+        const addDigits = (c.additionalNumbers || []).map(an => an.number.replace(/\D/g, ''));
+        if (addDigits.includes(digits)) return true;
+        return false;
+      });
+      if (duplicateCustomer) {
+        existsInDb = true;
+        break;
+      }
+    }
+
+    if (existsInDb) {
+      setMobileError('A MOBILE NUMBER ENTERED ALREADY EXISTS IN THE DATABASE');
       return;
     }
 
-    setStatus({ type: 'loading', message: 'CREATING...' });
+    setIsSavingLocal(true);
+    setIsSavedLocal(false);
 
     try {
+      const formattedAdditional: AdditionalNumber[] = additionalNumbers.map(an => ({
+        id: `AN-${Math.floor(100000 + Math.random() * 900000)}`,
+        number: formatPhoneNumber(an.suffix),
+        type: 'Additional'
+      }));
+
       const result = await onAddCustomer(
         trimmedName, 
         formattedMobile, 
@@ -209,18 +278,20 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
         formattedImo,
         customerCategory,
         address.trim(),
-        gender
+        gender,
+        formattedAdditional
       );
 
       if (result.success) {
-        setStatus({
-          type: 'success',
-          message: '✅ CUSTOMER CREATED SUCCESSFULLY'
-        });
+        // Show "Saving..." for less than one second (400ms)
+        await new Promise(resolve => setTimeout(resolve, 400));
+        setIsSavingLocal(false);
+        setIsSavedLocal(true);
 
         // Automatically clear all form states
         setName('');
         setMobileNumberSuffix('');
+        setAdditionalNumbers([]);
         setWhatsAppNumberSuffix('');
         setIsSameAsMobile(false);
         setImoNumberSuffix('');
@@ -238,18 +309,22 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
           nameInputRef.current?.focus();
         }, 50);
 
-        // Automatically reset success message banner after 3 seconds
+        // Automatically reset success message banner after 1.5 seconds
         setTimeout(() => {
-          setStatus(prev => prev.type === 'success' ? { type: 'idle', message: '' } : prev);
-        }, 3000);
+          setIsSavedLocal(false);
+        }, 1500);
 
       } else {
+        setIsSavingLocal(false);
+        setIsSavedLocal(false);
         setStatus({
           type: 'error',
           message: result.error || 'FAILED TO ADD CUSTOMER. PLEASE TRY AGAIN.'
         });
       }
     } catch (err: any) {
+      setIsSavingLocal(false);
+      setIsSavedLocal(false);
       setStatus({
         type: 'error',
         message: err.message || 'AN UNEXPECTED ERROR OCCURRED.'
@@ -309,41 +384,80 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           
           {/* Mobile Number Field */}
-          <FormGroup
-            label="Mobile Number"
-            required
-            htmlFor="customer-mobile"
-            error={mobileError}
-          >
-            <div className={`flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border ${mobileError ? 'border-rose-400 focus-within:ring-rose-400/20' : 'border-gray-200 dark:border-[#8a8a70]/30 focus-within:ring-accent-blue/20 focus-within:border-accent-blue'} overflow-hidden focus-within:ring-2 transition-all`}>
-              <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-xs font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
-                +880
+          <FormGroup error={mobileError}>
+            <div className="flex justify-between items-center h-5 mb-1.5">
+              <label htmlFor="customer-mobile" className="block text-sm font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
+                Mobile Number <span className="text-rose-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleAddAdditionalNumberField}
+                className="w-5.5 h-5.5 rounded-full bg-accent-green hover:bg-emerald-600 text-white flex items-center justify-center active:scale-95 transition-all shadow-xs shrink-0 cursor-pointer"
+                title="Add Additional Mobile Number"
+              >
+                <Plus className="w-3.5 h-3.5 text-white" />
+              </button>
+            </div>
+            
+            <div className="space-y-2">
+              <div className={`flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border ${mobileError ? 'border-rose-400 focus-within:ring-rose-400/20' : 'border-gray-200 dark:border-[#8a8a70]/30 focus-within:ring-accent-blue/20 focus-within:border-accent-blue'} overflow-hidden focus-within:ring-2 transition-all`}>
+                <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-[13px] font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
+                  +880
+                </div>
+                <input
+                  type="tel"
+                  id="customer-mobile"
+                  name="customer-mobile"
+                  required
+                  tabIndex={2}
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  className="w-full text-[13px] bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
+                  placeholder="17XXXXXXXX"
+                  value={mobileNumberSuffix}
+                  onChange={(e) => {
+                    setMobileNumberSuffix(e.target.value);
+                    setMobileError('');
+                    if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
+                  }}
+                  disabled={status.type === 'loading'}
+                />
               </div>
-              <input
-                type="tel"
-                id="customer-mobile"
-                name="customer-mobile"
-                required
-                tabIndex={2}
-                pattern="[0-9]*"
-                inputMode="numeric"
-                className="w-full text-xs bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
-                placeholder="17XXXXXXXX"
-                value={mobileNumberSuffix}
-                onChange={(e) => {
-                  setMobileNumberSuffix(e.target.value);
-                  setMobileError('');
-                  if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
-                }}
-                disabled={status.type === 'loading'}
-              />
+
+              {additionalNumbers.map((field) => (
+                <div key={field.id} className="flex items-center gap-2">
+                  <div className="flex-1 flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border border-gray-200 dark:border-[#8a8a70]/30 overflow-hidden focus-within:ring-2 focus-within:ring-accent-blue/20 focus-within:border-accent-blue transition-all">
+                    <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-[13px] font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
+                      +880
+                    </div>
+                    <input
+                      type="tel"
+                      pattern="[0-9]*"
+                      inputMode="numeric"
+                      className="w-full text-[13px] bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
+                      placeholder="17XXXXXXXX"
+                      value={field.suffix}
+                      onChange={(e) => handleAdditionalNumberChange(field.id, e.target.value)}
+                      disabled={status.type === 'loading'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAdditionalNumberField(field.id)}
+                    className="p-1.5 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg active:scale-95 transition-all shrink-0 cursor-pointer"
+                    title="Remove this number"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </FormGroup>
 
           {/* WhatsApp Field */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center h-4">
-              <label htmlFor="customer-whatsapp" className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
+              <label htmlFor="customer-whatsapp" className="block text-[13px] font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
                 WhatsApp Number
               </label>
               
@@ -363,14 +477,14 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                   <div className="w-7 h-4 bg-gray-200 dark:bg-zinc-700 rounded-full peer peer-checked:bg-accent-green transition-colors duration-200"></div>
                   <div className="absolute top-[2px] left-[2px] w-3 h-3 bg-white rounded-full transition-transform duration-200 peer-checked:translate-x-3"></div>
                 </div>
-                <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   USE MOBILE
                 </span>
               </label>
             </div>
             
             <div className={`flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border border-gray-200 dark:border-[#8a8a70]/30 overflow-hidden focus-within:ring-2 focus-within:ring-accent-blue/20 focus-within:border-accent-blue transition-all ${isSameAsMobile ? 'opacity-60 bg-gray-50 dark:bg-zinc-900/30' : ''}`}>
-              <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-xs font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
+              <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-[13px] font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
                 +880
               </div>
               <input
@@ -380,7 +494,7 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                 tabIndex={3}
                 pattern="[0-9]*"
                 inputMode="numeric"
-                className="w-full text-xs bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
+                className="w-full text-[13px] bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
                 placeholder="17XXXXXXXX"
                 value={isSameAsMobile ? mobileNumberSuffix : whatsAppNumberSuffix}
                 onChange={(e) => {
@@ -395,7 +509,7 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
           {/* IMO Field */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center h-4">
-              <label htmlFor="customer-imo" className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
+              <label htmlFor="customer-imo" className="block text-[13px] font-bold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
                 IMO Number
               </label>
               
@@ -415,14 +529,14 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                   <div className="w-7 h-4 bg-gray-200 dark:bg-zinc-700 rounded-full peer peer-checked:bg-accent-green transition-colors duration-200"></div>
                   <div className="absolute top-[2px] left-[2px] w-3 h-3 bg-white rounded-full transition-transform duration-200 peer-checked:translate-x-3"></div>
                 </div>
-                <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                   USE MOBILE
                 </span>
               </label>
             </div>
             
             <div className={`flex rounded-xl bg-[#F8FAFC] dark:bg-[#151510]/50 border border-gray-200 dark:border-[#8a8a70]/30 overflow-hidden focus-within:ring-2 focus-within:ring-accent-blue/20 focus-within:border-accent-blue transition-all ${isImoSameAsMobile ? 'opacity-60 bg-gray-50 dark:bg-zinc-900/30' : ''}`}>
-              <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-xs font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
+              <div className="bg-gray-100 dark:bg-zinc-800 px-3.5 flex items-center justify-center text-[13px] font-bold text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-[#8a8a70]/20 select-none">
                 +880
               </div>
               <input
@@ -432,7 +546,7 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                 tabIndex={4}
                 pattern="[0-9]*"
                 inputMode="numeric"
-                className="w-full text-xs bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
+                className="w-full text-[13px] bg-transparent border-none px-3.5 py-3 focus:outline-none font-medium text-[#1F2937] dark:text-[#ecece5] uppercase placeholder-gray-400"
                 placeholder="17XXXXXXXX"
                 value={isImoSameAsMobile ? mobileNumberSuffix : imoNumberSuffix}
                 onChange={(e) => {
@@ -457,11 +571,11 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                   <Search className="w-4 h-4" />
                 </div>
-                <input
+                 <input
                   type="text"
                   id="customer-category-search"
                   name="customer-category-search"
-                  className="w-full text-xs pl-10 pr-8 py-3 bg-white dark:bg-[#20201a] border border-[#5A5A40]/20 dark:border-[#8a8a70]/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A5A40] text-[#1F2937] dark:text-[#ecece5] font-medium placeholder-gray-400 uppercase"
+                  className="w-full text-[13px] pl-10 pr-8 py-3 bg-white dark:bg-[#20201a] border border-[#5A5A40]/20 dark:border-[#8a8a70]/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A5A40] text-[#1F2937] dark:text-[#ecece5] font-medium placeholder-gray-400 uppercase"
                   placeholder="SELECT CUSTOMER CATEGORY"
                   value={categorySearchQuery}
                   onChange={(e) => {
@@ -498,7 +612,7 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                           setIsCategoryDropdownOpen(false);
                           if (status.type !== 'idle') setStatus({ type: 'idle', message: '' });
                         }}
-                        className={`w-full text-left p-2.5 text-xs font-semibold transition-colors flex items-center justify-between hover:bg-[#5A5A40]/5 dark:hover:bg-[#8a8a70]/5 ${
+                        className={`w-full text-left p-2.5 text-[13px] font-semibold transition-colors flex items-center justify-between hover:bg-[#5A5A40]/5 dark:hover:bg-[#8a8a70]/5 ${
                           customerCategory === cat ? 'bg-[#5A5A40]/10 dark:bg-[#8a8a70]/10 text-primary-olive dark:text-white' : 'text-[#1F2937] dark:text-[#ecece5]'
                         }`}
                       >
@@ -506,7 +620,7 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                       </button>
                     ))
                   ) : (
-                    <div className="p-3 text-center text-xs text-gray-400 dark:text-[#8a8a70] italic">
+                    <div className="p-3 text-center text-[13px] text-gray-400 dark:text-[#8a8a70] italic">
                       No categories found matching query.
                     </div>
                   )}
@@ -533,7 +647,7 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
                   <select
                     id="customer-gender"
                     name="customer-gender"
-                    className="w-full text-xs bg-[#F8FAFC] dark:bg-[#151510]/50 border border-gray-200 dark:border-[#8a8a70]/30 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-accent-blue/20 focus:border-accent-blue text-[#1F2937] dark:text-[#ecece5] font-bold uppercase cursor-pointer"
+                    className="w-full text-[13px] bg-[#F8FAFC] dark:bg-[#151510]/50 border border-gray-200 dark:border-[#8a8a70]/30 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-accent-blue/20 focus:border-accent-blue text-[#1F2937] dark:text-[#ecece5] font-bold uppercase cursor-pointer"
                     value={gender}
                     onChange={(e) => {
                       setGender(e.target.value);
