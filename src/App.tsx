@@ -1168,6 +1168,12 @@ export default function App() {
                       onAddCustomer={handleAddCustomer}
                       existingCustomers={customers}
                       onSelectCustomer={handleSelectCustomer}
+                      currentUser={effectiveUser}
+                      tickets={tickets}
+                      followUps={followUps}
+                      onArchiveCustomer={handleArchiveCustomer}
+                      onUpdateCustomer={handleUpdateCustomer}
+                      syncConfig={config}
                     />
                   </div>
                 ) : (

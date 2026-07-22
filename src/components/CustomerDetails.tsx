@@ -30,7 +30,10 @@ import {
   Archive,
   RotateCcw,
   ShieldAlert,
-  AlertTriangle
+  AlertTriangle,
+  MoreVertical,
+  Download,
+  Eye
 } from 'lucide-react';
 
 interface CustomerDetailsProps {
@@ -107,6 +110,103 @@ const CustomerDetails = React.memo(function CustomerDetails({
   const [isConfirmArchiving, setIsConfirmArchiving] = useState(false);
   const [isConfirmRestoring, setIsConfirmRestoring] = useState(false);
   const [isConfirmPermanentDeleting, setIsConfirmPermanentDeleting] = useState(false);
+
+  // More Actions Dropdown & Active Record Validation State
+  const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false);
+  const moreActionsRef = React.useRef<HTMLDivElement>(null);
+  const [isBlockedArchiveModalOpen, setIsBlockedArchiveModalOpen] = useState(false);
+  const [activeRecordCounts, setActiveRecordCounts] = useState<{ openTickets: number; pendingFollowUps: number }>({ openTickets: 0, pendingFollowUps: 0 });
+  const [copiedIdToast, setCopiedIdToast] = useState(false);
+
+  // Close More Actions dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (moreActionsRef.current && !moreActionsRef.current.contains(event.target as Node)) {
+        setIsMoreActionsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Smart Visibility Rules for Archive Action
+  const canArchiveCustomer = React.useMemo(() => {
+    const isAdmin = currentUser?.role === 'Admin';
+    const isNotArchived = !customer.isArchived;
+    return isAdmin && isNotArchived;
+  }, [currentUser, customer]);
+
+  // Initiate Archive with Active Records Check
+  const handleInitiateArchive = () => {
+    setIsMoreActionsOpen(false);
+    
+    // Check for Open tickets
+    const openTicketsCount = tickets.filter(
+      t => t.customerId === customer.id && t.status === 'Open'
+    ).length;
+
+    // Check for Pending follow-ups
+    const pendingFollowUpsCount = followUps.filter(
+      f => f.customerId === customer.id && f.status === 'Pending'
+    ).length;
+
+    if (openTicketsCount > 0 || pendingFollowUpsCount > 0) {
+      setActiveRecordCounts({
+        openTickets: openTicketsCount,
+        pendingFollowUps: pendingFollowUpsCount
+      });
+      setIsBlockedArchiveModalOpen(true);
+      return;
+    }
+
+    setIsConfirmArchiving(true);
+  };
+
+  const handleViewDetails = () => {
+    setIsMoreActionsOpen(false);
+    const element = document.getElementById('customer-info-card');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleCopyCustomerId = () => {
+    setIsMoreActionsOpen(false);
+    navigator.clipboard.writeText(customer.id);
+    setCopiedIdToast(true);
+    setTimeout(() => setCopiedIdToast(false), 2500);
+  };
+
+  const handleExportCustomer = () => {
+    setIsMoreActionsOpen(false);
+    const exportData = {
+      id: customer.id,
+      name: customer.name,
+      mobileNumber: customer.mobileNumber,
+      whatsAppNumber: customer.whatsAppNumber || '',
+      imoNumber: customer.imoNumber || '',
+      customerCategory: customer.customerCategory || '',
+      destinationCountry: customer.destinationCountry || '',
+      address: customer.address || '',
+      gender: customer.gender || '',
+      source: customer.source || '',
+      remarks: customer.remarks || '',
+      createdAt: customer.createdAt,
+      tickets: tickets.filter(t => t.customerId === customer.id),
+      followUps: followUps.filter(f => f.customerId === customer.id)
+    };
+
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Customer_${customer.id}_${customer.name.replace(/\s+/g, '_')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
@@ -1053,27 +1153,79 @@ const CustomerDetails = React.memo(function CustomerDetails({
                       <span>EDIT PROFILE</span>
                     </button>
 
-                    <button
-                      onClick={() => setIsConfirmArchiving(true)}
-                      id="btn-archive-customer"
-                      className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[13px] rounded-full shadow-md shadow-amber-600/15 transition-all cursor-pointer active:scale-95"
-                      title="Archive Customer Profile"
-                    >
-                      <Archive className="w-3.5 h-3.5" />
-                      <span>ARCHIVE CUSTOMER</span>
-                    </button>
+                    {/* More Actions Dropdown */}
+                    <div className="relative" ref={moreActionsRef}>
+                      <button
+                        onClick={() => setIsMoreActionsOpen(prev => !prev)}
+                        id="btn-more-actions"
+                        className="inline-flex items-center justify-center gap-1.5 px-4 h-10 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-[#1a1a15] dark:hover:bg-[#25251e] dark:text-[#ecece5] font-bold text-[13px] rounded-full border border-gray-200 dark:border-[#8a8a70]/30 transition-all cursor-pointer active:scale-95"
+                        title="More Actions"
+                      >
+                        <span>MORE</span>
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+
+                      <AnimatePresence>
+                        {isMoreActionsOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#1a1a15] rounded-2xl border border-gray-200 dark:border-[#8a8a70]/30 shadow-xl z-50 overflow-hidden py-1.5 text-[13px] font-bold"
+                            id="dropdown-more-actions"
+                          >
+                            <button
+                              onClick={handleViewDetails}
+                              id="action-view-details"
+                              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-gray-700 dark:text-[#ecece5] hover:bg-gray-50 dark:hover:bg-[#25251e] transition-colors text-left cursor-pointer"
+                            >
+                              <Eye className="w-4 h-4 text-gray-400" />
+                              <span>VIEW DETAILS</span>
+                            </button>
+
+                            <button
+                              onClick={handleCopyCustomerId}
+                              id="action-copy-customer-id"
+                              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-gray-700 dark:text-[#ecece5] hover:bg-gray-50 dark:hover:bg-[#25251e] transition-colors text-left cursor-pointer"
+                            >
+                              <Copy className="w-4 h-4 text-gray-400" />
+                              <span>COPY CUSTOMER ID</span>
+                            </button>
+
+                            <button
+                              onClick={handleExportCustomer}
+                              id="action-export-customer"
+                              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-gray-700 dark:text-[#ecece5] hover:bg-gray-50 dark:hover:bg-[#25251e] transition-colors text-left cursor-pointer"
+                            >
+                              <Download className="w-4 h-4 text-gray-400" />
+                              <span>EXPORT CUSTOMER</span>
+                            </button>
+
+                            {canArchiveCustomer && (
+                              <>
+                                <div className="my-1 border-t border-gray-100 dark:border-[#8a8a70]/10" />
+                                <button
+                                  onClick={handleInitiateArchive}
+                                  id="btn-archive-customer"
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors text-left cursor-pointer"
+                                >
+                                  <Archive className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                  <span>ARCHIVE CUSTOMER</span>
+                                </button>
+                              </>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </>
                 ) : (
-                  <>
-                    <button
-                      onClick={() => setIsConfirmRestoring(true)}
-                      id="btn-restore-customer"
-                      className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] rounded-full shadow-md shadow-emerald-600/15 transition-all cursor-pointer active:scale-95"
-                      title="Restore to Active Directory"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>RESTORE CUSTOMER</span>
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-[13px] rounded-full border border-amber-300 dark:border-amber-800/50" id="badge-customer-archived">
+                      <Archive className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span>ARCHIVED</span>
+                    </span>
 
                     {currentUser?.role === 'Admin' && (
                       <button
@@ -1086,7 +1238,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
                         <span>PERMANENTLY DELETE</span>
                       </button>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             </div>
@@ -1480,6 +1632,98 @@ const CustomerDetails = React.memo(function CustomerDetails({
           </div>
         )}
       </div>
+
+      {/* Copied Customer ID Toast */}
+      {copiedIdToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-3 duration-200" id="toast-copied-customer-id">
+          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <span>Customer ID copied to clipboard!</span>
+        </div>
+      )}
+
+      {/* Active Records Warning Modal (Prevents Archiving) */}
+      {isBlockedArchiveModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c16] rounded-2xl border border-rose-500/40 max-w-md w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3 text-rose-600 dark:text-rose-400">
+              <div className="p-2.5 bg-rose-100 dark:bg-rose-950/50 rounded-xl shrink-0">
+                <ShieldAlert className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold uppercase tracking-wide text-gray-900 dark:text-white">
+                  Cannot Archive Customer
+                </h2>
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-bold uppercase mt-0.5">
+                  Active Records Still Exist
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-xl space-y-2">
+              <p className="text-xs text-gray-700 dark:text-gray-200 font-semibold leading-relaxed">
+                This customer cannot be archived because active records still exist.
+              </p>
+              
+              <div className="pt-2 border-t border-rose-200/60 dark:border-rose-900/40 text-xs font-mono font-bold space-y-1 text-rose-900 dark:text-rose-300">
+                {activeRecordCounts.openTickets > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span>{activeRecordCounts.openTickets} OPEN TICKET(S)</span>
+                  </div>
+                )}
+                {activeRecordCounts.pendingFollowUps > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>{activeRecordCounts.pendingFollowUps} PENDING FOLLOW-UP(S)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-[#8a8a70]/20">
+              <button
+                onClick={() => setIsBlockedArchiveModalOpen(false)}
+                id="btn-cancel-blocked-archive"
+                className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              
+              {activeRecordCounts.openTickets > 0 && (
+                <button
+                  onClick={() => {
+                    setIsBlockedArchiveModalOpen(false);
+                    setActiveSubTab('tickets');
+                    const el = document.getElementById('ticket-history-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  id="btn-view-tickets-blocked-archive"
+                  className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-all cursor-pointer shadow-md active:scale-95 flex items-center gap-1.5"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>View Tickets</span>
+                </button>
+              )}
+
+              {activeRecordCounts.pendingFollowUps > 0 && (
+                <button
+                  onClick={() => {
+                    setIsBlockedArchiveModalOpen(false);
+                    setActiveSubTab('followups');
+                    const el = document.getElementById('customer-followups-panel');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  id="btn-view-followups-blocked-archive"
+                  className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-all cursor-pointer shadow-md active:scale-95 flex items-center gap-1.5"
+                >
+                  <CalendarCheck className="w-3.5 h-3.5" />
+                  <span>View Follow-ups</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Archive Confirmation Modal */}
       {isConfirmArchiving && (
