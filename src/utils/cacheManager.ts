@@ -1,4 +1,5 @@
 import { Customer, Ticket, FollowUp, SyncConfig, CRMData } from '../types';
+import { DEFAULT_WEB_APP_URL } from './crmApi';
 import { 
   initDb, 
   saveCustomersToDb, 
@@ -116,19 +117,30 @@ if (typeof window !== 'undefined') {
 
 // Helper to check actual server connectivity if online
 export async function checkServerConnectivity(webAppUrl: string): Promise<boolean> {
-  if (!navigator.onLine || !webAppUrl) return false;
+  const targetUrl = webAppUrl || DEFAULT_WEB_APP_URL;
+  if (!targetUrl) return false;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(`${webAppUrl}?action=ping`, { 
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const response = await fetch(`${targetUrl}?action=get_data`, { 
       method: 'GET',
       mode: 'cors',
       signal: controller.signal
     });
     clearTimeout(timeoutId);
-    return response.ok;
-  } catch (e) {
+    if (response.ok) {
+      const data = await response.json().catch(() => null);
+      if (data && data.success === true) {
+        isOnline = true;
+        return true;
+      }
+      isOnline = true;
+      return true;
+    }
     return false;
+  } catch (e) {
+    console.warn("Server connectivity check exception:", e);
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
   }
 }
 
@@ -341,6 +353,7 @@ export async function performSmartSync(config: SyncConfig): Promise<{
     lastSyncTime = new Date();
     await setCacheMetadataInDb('lastSyncTime', lastSyncTime.toISOString());
 
+    isOnline = true;
     syncStatus = memorySyncQueue.length > 0 ? 'PENDING' : 'CONNECTED';
     notifySubscribers();
 
@@ -989,16 +1002,28 @@ export async function triggerAutoSync(manualConfig?: SyncConfig) {
   
   const envApiUrl = (import.meta as any).env?.VITE_API_URL || '';
   const storedConfig = typeof localStorage !== 'undefined' ? localStorage.getItem('move_abroad_crm_sync_config') : null;
-  let activeConfig: SyncConfig = { webAppUrl: envApiUrl, isLiveMode: !!envApiUrl };
+  let activeConfig: SyncConfig = { webAppUrl: envApiUrl || DEFAULT_WEB_APP_URL, isLiveMode: true };
   
-  if (manualConfig) {
-    activeConfig = manualConfig;
+  if (manualConfig && manualConfig.webAppUrl) {
+    activeConfig = {
+      ...manualConfig,
+      webAppUrl: manualConfig.webAppUrl || DEFAULT_WEB_APP_URL,
+      isLiveMode: true
+    };
   } else if (storedConfig) {
-    try { activeConfig = JSON.parse(storedConfig); } catch (e) {}
+    try { 
+      const parsed = JSON.parse(storedConfig); 
+      activeConfig = {
+        ...parsed,
+        webAppUrl: parsed.webAppUrl || envApiUrl || DEFAULT_WEB_APP_URL,
+        isLiveMode: true
+      };
+    } catch (e) {}
   }
 
-  if (!activeConfig.isLiveMode || !activeConfig.webAppUrl) {
-    return; // Sync not enabled
+  if (!activeConfig.webAppUrl) {
+    activeConfig.webAppUrl = DEFAULT_WEB_APP_URL;
+    activeConfig.isLiveMode = true;
   }
 
   // Reload sync queue
@@ -1392,9 +1417,16 @@ export async function retryQueueItem(queueId: string) {
 
   const envApiUrl = (import.meta as any).env?.VITE_API_URL || '';
   const storedConfig = typeof localStorage !== 'undefined' ? localStorage.getItem('move_abroad_crm_sync_config') : null;
-  let activeConfig: SyncConfig = { webAppUrl: envApiUrl, isLiveMode: !!envApiUrl };
+  let activeConfig: SyncConfig = { webAppUrl: envApiUrl || DEFAULT_WEB_APP_URL, isLiveMode: true };
   if (storedConfig) {
-    try { activeConfig = JSON.parse(storedConfig); } catch (e) {}
+    try { 
+      const parsed = JSON.parse(storedConfig); 
+      activeConfig = {
+        ...parsed,
+        webAppUrl: parsed.webAppUrl || envApiUrl || DEFAULT_WEB_APP_URL,
+        isLiveMode: true
+      };
+    } catch (e) {}
   }
 
   // Clear previous debug parameters

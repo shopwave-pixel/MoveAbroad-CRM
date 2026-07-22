@@ -409,6 +409,7 @@ export default function App() {
       const syncResult = await performSmartSync(currentConfig);
       
       if (syncResult.success) {
+        setIsOnline(true);
         setSyncStatus('LIVE'); // Render '🟢 Synced' status label in header
         setLastSyncTime(new Date());
         

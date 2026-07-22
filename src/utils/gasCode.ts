@@ -20,7 +20,15 @@ export const GOOGLE_APPS_SCRIPT_CODE = `/**
 // Handle GET requests
 function doGet(e) {
   try {
-    const action = e.parameter.action;
+    const action = e ? e.parameter.action : 'get_data';
+
+    if (action === 'ping') {
+      return jsonResponse({
+        success: true,
+        message: 'MoveAboard CRM Backend Online'
+      });
+    }
+
     const sheets = setupSheets();
     
     if (action === 'get_data') {

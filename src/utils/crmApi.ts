@@ -110,6 +110,8 @@ export function initLocalStorage() {
   }
 }
 
+export const DEFAULT_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzmjA7Wimhp8zm7K7Hv0DC-i2_F8yETDFEhXmEVR0AT08HKBhqBEm0GmrD4jzwgYFlmYQ/exec';
+
 // Get synchronization configuration
 export function getSyncConfig(): SyncConfig {
   const stored = localStorage.getItem(STORAGE_KEY_CONFIG);
@@ -125,12 +127,17 @@ export function getSyncConfig(): SyncConfig {
 
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      return {
+        ...parsed,
+        webAppUrl: parsed.webAppUrl || DEFAULT_WEB_APP_URL,
+        isLiveMode: parsed.isLiveMode !== undefined ? parsed.isLiveMode : true
+      };
     } catch {
       // Return default
     }
   }
-  return { webAppUrl: '', isLiveMode: false };
+  return { webAppUrl: DEFAULT_WEB_APP_URL, isLiveMode: true, setupComplete: true };
 }
 
 // Save synchronization configuration
@@ -372,16 +379,25 @@ export async function loginUser(
     try {
       const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
-      if (!response.ok) throw new Error("Backend unreachable");
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || "Invalid credentials");
-      return { success: true, user: data.user };
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          return { success: true, user: data.user };
+        }
+        if (data.error && data.error !== "User not found" && data.error !== "Password incorrect" && data.error !== "Account disabled") {
+          // If error is generic backend issue, fallback to local users
+        } else if (data.error) {
+          throw new Error(data.error);
+        }
+      }
     } catch (err: any) {
-      console.error('Fetch error during login:', err);
-      throw new Error("Backend unreachable");
+      console.warn('Backend fetch during login encountered issue, attempting local authentication fallback:', err);
+      if (err.message === "Password incorrect" || err.message === "User not found" || err.message === "Account disabled") {
+        throw err;
+      }
     }
   }
 
@@ -486,7 +502,7 @@ export async function createUser(
     try {
       const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error(`HTTP Status ${response.status}`);
@@ -562,7 +578,7 @@ export async function updateUser(
     try {
       const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error(`HTTP Status ${response.status}`);
@@ -610,7 +626,7 @@ export async function deleteUser(config: SyncConfig, id: string): Promise<{ succ
     try {
       const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'delete_user',
           id
@@ -661,7 +677,7 @@ export async function setupDefaultSheetsAndAdmin(
     try {
       const response = await fetch(config.webAppUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'setup_sheets',
           adminFullName,
