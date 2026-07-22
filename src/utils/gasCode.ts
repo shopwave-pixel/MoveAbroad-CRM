@@ -694,54 +694,91 @@ function doPost(e) {
   }
 }
 
-// Set up the spreadsheet structures
+// Set up the spreadsheet structures for core and enterprise sheets
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  const requiredUsersHeaders = [
-    "User ID", 
-    "Full Name", 
-    "Login ID", 
-    "Password", 
-    "Role", 
-    "Status", 
-    "Created At"
-  ];
 
-  const requiredCustomerHeaders = [
-    "Customer ID", 
-    "Full Name", 
-    "Mobile Number", 
-    "WhatsApp Number", 
-    "Destination Country", 
-    "Source", 
-    "Remarks", 
-    "Created At",
-    "Customer Category",
-    "Address",
-    "Gender"
-  ];
-
-  const requiredTicketsHeaders = [
-    "Ticket ID", 
-    "Customer ID", 
-    "Customer Name", 
-    "Mobile Number", 
-    "Conversation Description", 
-    "Status", 
-    "Created At"
-  ];
-
-  const requiredFollowUpsHeaders = [
-    "Follow-up ID", 
-    "Customer ID", 
-    "Customer Name", 
-    "Mobile Number", 
-    "Follow-up Date", 
-    "Follow-up Time", 
-    "Notes", 
-    "Status", 
-    "Created At"
+  const sheetDefinitions = [
+    {
+      name: "Users",
+      headers: ["User ID", "Full Name", "Login ID", "Password", "Role", "Status", "Created At"]
+    },
+    {
+      name: "Customers",
+      headers: ["Customer ID", "Full Name", "Mobile Number", "WhatsApp Number", "Destination Country", "Source", "Remarks", "Created At", "Customer Category", "Address", "Gender"]
+    },
+    {
+      name: "Tickets",
+      headers: ["Ticket ID", "Customer ID", "Customer Name", "Mobile Number", "Conversation Description", "Status", "Created At"]
+    },
+    {
+      name: "FollowUps",
+      headers: ["Follow-up ID", "Customer ID", "Customer Name", "Mobile Number", "Follow-up Date", "Follow-up Time", "Notes", "Status", "Created At"]
+    },
+    {
+      name: "Archived Customers",
+      headers: ["Archive ID", "Customer ID", "Full Name", "Mobile Number", "WhatsApp Number", "IMO Number", "Email", "Customer Category", "Address", "Gender", "Destination Country", "Source", "Remarks", "Created At", "Archived At", "Archived By", "Archive Reason", "Original Customer ID", "Status"]
+    },
+    {
+      name: "Duplicate Groups",
+      headers: ["Group ID", "Match Type", "Confidence Score", "Matched Value", "Primary Customer ID", "Duplicate Customer IDs", "Status", "Detected At", "Reviewed By", "Reviewed At"]
+    },
+    {
+      name: "Duplicate Audit Log",
+      headers: ["Log ID", "Group ID", "Action", "Primary Customer", "Duplicate Customer", "Performed By", "Date Time", "Reason"]
+    },
+    {
+      name: "Customer Notes",
+      headers: ["Note ID", "Customer ID", "Note", "Created By", "Created At", "Updated At"]
+    },
+    {
+      name: "Activity Log",
+      headers: ["Activity ID", "Customer ID", "Module", "Action", "Performed By", "Date Time", "Description"]
+    },
+    {
+      name: "Sync Queue",
+      headers: ["Queue ID", "Action", "Payload", "Status", "Retry Count", "Created At", "Completed At"]
+    },
+    {
+      name: "System Logs",
+      headers: ["Log ID", "Level", "Module", "Message", "Stack Trace", "Created At"]
+    },
+    {
+      name: "Settings",
+      headers: ["Setting Key", "Setting Value", "Updated By", "Updated At"]
+    },
+    {
+      name: "Countries",
+      headers: ["Country ID", "Country Name", "Status", "Sort Order"]
+    },
+    {
+      name: "Categories",
+      headers: ["Category ID", "Category Name", "Color", "Status"]
+    },
+    {
+      name: "Sources",
+      headers: ["Source ID", "Source Name", "Status"]
+    },
+    {
+      name: "Dashboard Cache",
+      headers: ["Metric", "Value", "Updated At"]
+    },
+    {
+      name: "Notifications",
+      headers: ["Notification ID", "User ID", "Title", "Message", "Type", "Read", "Created At"]
+    },
+    {
+      name: "Employee Activity",
+      headers: ["Employee ID", "Employee Name", "Tickets", "Customers", "FollowUps", "Login Time", "Logout Time", "Date"]
+    },
+    {
+      name: "Backup History",
+      headers: ["Backup ID", "File Name", "Google Drive URL", "Created By", "Created At"]
+    },
+    {
+      name: "API Keys",
+      headers: ["Provider", "API Key", "Status", "Updated At"]
+    }
   ];
 
   function ensureSheetHeaders(sheet, requiredHeaders) {
@@ -772,53 +809,46 @@ function setupSheets() {
       const startCol = lastColumn + 1;
       const range = sheet.getRange(1, startCol, 1, headersToAppend.length);
       range.setValues([headersToAppend]);
-      // Set bold style for newly added headers
       sheet.getRange(1, 1, 1, startCol + headersToAppend.length - 1).setFontWeight("bold");
     }
   }
 
-  let usersSheet = ss.getSheetByName("Users");
-  if (!usersSheet) {
-    usersSheet = ss.insertSheet("Users");
-    usersSheet.appendRow(requiredUsersHeaders);
-    usersSheet.getRange(1, 1, 1, requiredUsersHeaders.length).setFontWeight("bold");
-  } else {
-    ensureSheetHeaders(usersSheet, requiredUsersHeaders);
+  const resultSheets = {};
+
+  for (let i = 0; i < sheetDefinitions.length; i++) {
+    const def = sheetDefinitions[i];
+    let sheet = ss.getSheetByName(def.name);
+    if (!sheet) {
+      sheet = ss.insertSheet(def.name);
+      sheet.appendRow(def.headers);
+      sheet.getRange(1, 1, 1, def.headers.length).setFontWeight("bold");
+    } else {
+      ensureSheetHeaders(sheet, def.headers);
+    }
+
+    if (def.name === "Users") resultSheets.usersSheet = sheet;
+    else if (def.name === "Customers") resultSheets.customersSheet = sheet;
+    else if (def.name === "Tickets") resultSheets.ticketsSheet = sheet;
+    else if (def.name === "FollowUps") resultSheets.followUpsSheet = sheet;
+    else if (def.name === "Archived Customers") resultSheets.archivedCustomersSheet = sheet;
+    else if (def.name === "Duplicate Groups") resultSheets.duplicateGroupsSheet = sheet;
+    else if (def.name === "Duplicate Audit Log") resultSheets.duplicateAuditLogSheet = sheet;
+    else if (def.name === "Customer Notes") resultSheets.customerNotesSheet = sheet;
+    else if (def.name === "Activity Log") resultSheets.activityLogSheet = sheet;
+    else if (def.name === "Sync Queue") resultSheets.syncQueueSheet = sheet;
+    else if (def.name === "System Logs") resultSheets.systemLogsSheet = sheet;
+    else if (def.name === "Settings") resultSheets.settingsSheet = sheet;
+    else if (def.name === "Countries") resultSheets.countriesSheet = sheet;
+    else if (def.name === "Categories") resultSheets.categoriesSheet = sheet;
+    else if (def.name === "Sources") resultSheets.sourcesSheet = sheet;
+    else if (def.name === "Dashboard Cache") resultSheets.dashboardCacheSheet = sheet;
+    else if (def.name === "Notifications") resultSheets.notificationsSheet = sheet;
+    else if (def.name === "Employee Activity") resultSheets.employeeActivitySheet = sheet;
+    else if (def.name === "Backup History") resultSheets.backupHistorySheet = sheet;
+    else if (def.name === "API Keys") resultSheets.apiKeysSheet = sheet;
   }
 
-  let customersSheet = ss.getSheetByName("Customers");
-  if (!customersSheet) {
-    customersSheet = ss.insertSheet("Customers");
-    customersSheet.appendRow(requiredCustomerHeaders);
-    customersSheet.getRange(1, 1, 1, requiredCustomerHeaders.length).setFontWeight("bold");
-  } else {
-    ensureSheetHeaders(customersSheet, requiredCustomerHeaders);
-  }
-  
-  let ticketsSheet = ss.getSheetByName("Tickets");
-  if (!ticketsSheet) {
-    ticketsSheet = ss.insertSheet("Tickets");
-    ticketsSheet.appendRow(requiredTicketsHeaders);
-    ticketsSheet.getRange(1, 1, 1, requiredTicketsHeaders.length).setFontWeight("bold");
-  } else {
-    ensureSheetHeaders(ticketsSheet, requiredTicketsHeaders);
-  }
-
-  let followUpsSheet = ss.getSheetByName("FollowUps");
-  if (!followUpsSheet) {
-    followUpsSheet = ss.insertSheet("FollowUps");
-    followUpsSheet.appendRow(requiredFollowUpsHeaders);
-    followUpsSheet.getRange(1, 1, 1, requiredFollowUpsHeaders.length).setFontWeight("bold");
-  } else {
-    ensureSheetHeaders(followUpsSheet, requiredFollowUpsHeaders);
-  }
-  
-  return {
-    usersSheet: usersSheet,
-    customersSheet: customersSheet,
-    ticketsSheet: ticketsSheet,
-    followUpsSheet: followUpsSheet
-  };
+  return resultSheets;
 }
 
 // Fetch all users as JSON objects using dynamic header mapping
