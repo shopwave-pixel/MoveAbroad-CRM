@@ -632,13 +632,25 @@ function doPost(e) {
     // --- TICKET ACTIONS ---
     if (action === 'create_ticket') {
       const customerId = (payload.customerId || '').trim();
-      const name = (payload.name || '').trim();
-      const mobileNumber = (payload.mobileNumber || '').trim();
+      let name = (payload.name || '').trim();
+      let mobileNumber = (payload.mobileNumber || '').trim();
       const conversationDescription = (payload.conversationDescription || '').trim();
       const status = (payload.status || 'Open').trim();
-      
-      if (!customerId || !name || !mobileNumber || !conversationDescription) {
-        return jsonResponse({ success: false, error: "Customer details and conversation description are required." });
+
+      if (!customerId || !conversationDescription) {
+        return jsonResponse({ success: false, error: "Customer ID and conversation description are required." });
+      }
+
+      // Auto-lookup customer details if missing
+      if (!name || !mobileNumber) {
+        const customers = getCustomers(sheets.customersSheet);
+        const matchedCust = customers.find(c => c.id === customerId);
+        if (matchedCust) {
+          if (!name) name = matchedCust.name || 'Customer';
+          if (!mobileNumber) mobileNumber = matchedCust.mobileNumber || '';
+        } else {
+          if (!name) name = 'Customer';
+        }
       }
       
       const tickets = getTickets(sheets.ticketsSheet);
@@ -719,15 +731,27 @@ function doPost(e) {
     // --- FOLLOWUP ACTIONS ---
     if (action === 'create_follow_up') {
       const customerId = (payload.customerId || '').trim();
-      const name = (payload.name || '').trim();
-      const mobileNumber = (payload.mobileNumber || '').trim();
+      let name = (payload.name || '').trim();
+      let mobileNumber = (payload.mobileNumber || '').trim();
       const followUpDate = (payload.followUpDate || '').trim();
       const followUpTime = (payload.followUpTime || '').trim();
       const notes = (payload.notes || '').trim();
       const status = (payload.status || 'Pending').trim();
 
-      if (!customerId || !name || !mobileNumber || !followUpDate || !followUpTime) {
-        return jsonResponse({ success: false, error: "Customer, Date, and Time are required." });
+      if (!customerId || !followUpDate || !followUpTime) {
+        return jsonResponse({ success: false, error: "Customer ID, Date, and Time are required." });
+      }
+
+      // Auto-lookup customer details if missing
+      if (!name || !mobileNumber) {
+        const customers = getCustomers(sheets.customersSheet);
+        const matchedCust = customers.find(c => c.id === customerId);
+        if (matchedCust) {
+          if (!name) name = matchedCust.name || 'Customer';
+          if (!mobileNumber) mobileNumber = matchedCust.mobileNumber || '';
+        } else {
+          if (!name) name = 'Customer';
+        }
       }
 
       const followUps = getFollowUps(sheets.followUpsSheet);

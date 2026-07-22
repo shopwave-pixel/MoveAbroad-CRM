@@ -80,7 +80,7 @@ const TicketsManager = React.memo(function TicketsManager({
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerMobile, setNewCustomerMobile] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<TicketStatus>('Closed');
+  const [status, setStatus] = useState<TicketStatus>('Open');
 
   // Customer Search query state (specifically for creating tickets)
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -215,7 +215,18 @@ const TicketsManager = React.memo(function TicketsManager({
     setAlert({ type: 'loading', message: 'Generating support ticket...' });
 
     try {
-      const existing = customers.find(c => c.id === selectedCustomerId);
+      let existing = customers.find(c => c.id === selectedCustomerId);
+      if (!existing && newCustomerMobile) {
+        existing = customers.find(c => c.mobileNumber.replace(/\D/g, '') === newCustomerMobile.replace(/\D/g, ''));
+      }
+      if (!existing && newCustomerName) {
+        existing = customers.find(c => c.name.toLowerCase() === newCustomerName.toLowerCase());
+      }
+      if (!existing && customers.length > 0 && selectedCustomerId) {
+        // Fallback if selectedCustomerId was transformed from temp ID to perm ID
+        existing = customers[0];
+      }
+
       if (!existing) {
         setAlert({ type: 'error', message: 'Please select a valid customer.' });
         return;
@@ -244,7 +255,7 @@ const TicketsManager = React.memo(function TicketsManager({
         setDescription('');
         setNewCustomerName('');
         setNewCustomerMobile('');
-        setStatus('Closed');
+        setStatus('Open');
         
         // Transition back to list after a brief delay
         setTimeout(() => {

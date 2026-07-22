@@ -62,6 +62,13 @@ interface CustomerDetailsProps {
   onArchiveCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
   onRestoreCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
   onPermanentDeleteCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onCreateTicket?: (
+    customerId: string,
+    name: string,
+    mobileNumber: string,
+    conversationDescription: string,
+    status: TicketStatus
+  ) => Promise<{ success: boolean; ticket?: Ticket; error?: string }>;
   currentUser?: UserType | null;
 }
 
@@ -101,6 +108,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
   onArchiveCustomer,
   onRestoreCustomer,
   onPermanentDeleteCustomer,
+  onCreateTicket,
   currentUser
 }: CustomerDetailsProps) {
   // Filters
@@ -117,6 +125,13 @@ const CustomerDetails = React.memo(function CustomerDetails({
   const [isBlockedArchiveModalOpen, setIsBlockedArchiveModalOpen] = useState(false);
   const [activeRecordCounts, setActiveRecordCounts] = useState<{ openTickets: number; pendingFollowUps: number }>({ openTickets: 0, pendingFollowUps: 0 });
   const [copiedIdToast, setCopiedIdToast] = useState(false);
+
+  // Inline Quick Ticket Creation State
+  const [isInlineCreatingTicket, setIsInlineCreatingTicket] = useState(false);
+  const [inlineTicketDesc, setInlineTicketDesc] = useState('');
+  const [inlineTicketStatus, setInlineTicketStatus] = useState<TicketStatus>('Open');
+  const [inlineTicketSubmitting, setInlineTicketSubmitting] = useState(false);
+  const [inlineTicketAlert, setInlineTicketAlert] = useState<{ type: 'idle' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' });
 
   // Close More Actions dropdown when clicking outside
   useEffect(() => {
@@ -1502,7 +1517,7 @@ const CustomerDetails = React.memo(function CustomerDetails({
         {/* 🎫 Tickets History Tab */}
         {activeSubTab === 'tickets' && (
           <div className="space-y-4" id="ticket-history-section">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-4 bg-[#3B82F6] rounded" />
                 <h2 className="font-serif font-bold text-[#1F2937] dark:text-[#f5f5f0] text-[16px] uppercase tracking-tight flex items-center gap-1.5">
@@ -1511,17 +1526,125 @@ const CustomerDetails = React.memo(function CustomerDetails({
                 </h2>
               </div>
               
-              <select
-                className="text-[13px] font-bold bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/30 rounded-lg px-2 py-1 text-gray-600 dark:text-[#C4C4B5] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-              >
-                <option value="All">ALL STATUS</option>
-                <option value="Open">OPEN</option>
-                <option value="Pending">PENDING</option>
-                <option value="Closed">CLOSED</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsInlineCreatingTicket(!isInlineCreatingTicket);
+                    setInlineTicketAlert({ type: 'idle', message: '' });
+                  }}
+                  className="bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[12px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 uppercase transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isInlineCreatingTicket ? 'Cancel' : 'File Ticket'}</span>
+                </button>
+
+                <select
+                  className="text-[13px] font-bold bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/30 rounded-lg px-2 py-1 text-gray-600 dark:text-[#C4C4B5] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                >
+                  <option value="All">ALL STATUS</option>
+                  <option value="Open">OPEN</option>
+                  <option value="Pending">PENDING</option>
+                  <option value="Closed">CLOSED</option>
+                </select>
+              </div>
             </div>
+
+            {/* Inline Quick Ticket Form */}
+            {isInlineCreatingTicket && (
+              <div className="p-4 bg-blue-50/50 dark:bg-[#1a1a15] border border-blue-200 dark:border-[#8a8a70]/30 rounded-2xl space-y-3 animate-fade-in">
+                <h3 className="font-serif font-bold text-xs text-[#3B82F6] dark:text-[#60a5fa] uppercase flex items-center gap-1.5">
+                  <FileText className="w-4 h-4" />
+                  <span>File Support Ticket for {customer.name}</span>
+                </h3>
+
+                {inlineTicketAlert.type === 'error' && (
+                  <div className="p-2.5 bg-rose-50 text-rose-700 text-xs font-bold rounded-xl border border-rose-200 uppercase">
+                    {inlineTicketAlert.message}
+                  </div>
+                )}
+
+                {inlineTicketAlert.type === 'success' && (
+                  <div className="p-2.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200 uppercase">
+                    {inlineTicketAlert.message}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 dark:text-[#8a8a70] uppercase mb-1">
+                    Ticket Description <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="w-full text-xs p-3 bg-white dark:bg-[#20201a] border border-gray-200 dark:border-[#8a8a70]/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-[#1F2937] dark:text-[#ecece5]"
+                    placeholder="Enter customer support inquiry, documentation details, or conversation log..."
+                    value={inlineTicketDesc}
+                    onChange={(e) => setInlineTicketDesc(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-bold text-gray-500 dark:text-[#8a8a70] uppercase">
+                      Status:
+                    </label>
+                    <select
+                      className="text-xs font-bold bg-white dark:bg-[#20201a] border border-gray-200 dark:border-[#8a8a70]/30 rounded-lg px-2.5 py-1 text-[#1F2937] dark:text-[#ecece5]"
+                      value={inlineTicketStatus}
+                      onChange={(e) => setInlineTicketStatus(e.target.value as TicketStatus)}
+                    >
+                      <option value="Open">OPEN</option>
+                      <option value="Closed">CLOSED</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={inlineTicketSubmitting}
+                    onClick={async () => {
+                      const desc = inlineTicketDesc.trim();
+                      if (!desc) {
+                        setInlineTicketAlert({ type: 'error', message: 'Ticket description is required.' });
+                        return;
+                      }
+
+                      setInlineTicketSubmitting(true);
+                      setInlineTicketAlert({ type: 'idle', message: '' });
+
+                      try {
+                        let res;
+                        if (onCreateTicket) {
+                          res = await onCreateTicket(customer.id, customer.name, customer.mobileNumber, desc, inlineTicketStatus);
+                        } else {
+                          onAddTicket(customer.id);
+                          res = { success: true };
+                        }
+
+                        if (res.success) {
+                          setInlineTicketAlert({ type: 'success', message: 'Support ticket created successfully!' });
+                          setInlineTicketDesc('');
+                          setTimeout(() => {
+                            setIsInlineCreatingTicket(false);
+                            setInlineTicketAlert({ type: 'idle', message: '' });
+                          }, 1200);
+                        } else {
+                          setInlineTicketAlert({ type: 'error', message: res.error || 'Failed to create ticket.' });
+                        }
+                      } catch (err: any) {
+                        setInlineTicketAlert({ type: 'error', message: err.message || 'An unexpected error occurred.' });
+                      } finally {
+                        setInlineTicketSubmitting(false);
+                      }
+                    }}
+                    className="bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer uppercase shadow-xs disabled:opacity-50"
+                  >
+                    {inlineTicketSubmitting ? 'Saving...' : 'Save Support Ticket'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 max-h-[420px] overflow-y-auto" id="customer-ticket-logs">
               {customerTickets.length > 0 ? (

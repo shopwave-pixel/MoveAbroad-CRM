@@ -791,9 +791,23 @@ export async function queuePermanentDeleteCustomer(config: SyncConfig, id: strin
 
 // CREATE TICKET
 export async function queueCreateTicket(config: SyncConfig, ticket: Omit<Ticket, 'id' | 'createdAt'>): Promise<{ success: boolean; ticket: Ticket }> {
+  let effectiveCustomerId = ticket.customerId;
+  let name = ticket.name || '';
+  let mobileNumber = ticket.mobileNumber || '';
+
+  const customer = memoryCustomers.find(c => c.id === effectiveCustomerId || (c.mobileNumber && c.mobileNumber === mobileNumber) || (c.name && c.name === name));
+  if (customer) {
+    effectiveCustomerId = customer.id;
+    if (!name) name = customer.name;
+    if (!mobileNumber) mobileNumber = customer.mobileNumber;
+  }
+
   const tempId = generateTempId('TKT-TEMP');
   const newTicket: Ticket = {
     ...ticket,
+    customerId: effectiveCustomerId,
+    name,
+    mobileNumber,
     id: tempId,
     createdAt: new Date().toISOString()
   };
@@ -809,7 +823,7 @@ export async function queueCreateTicket(config: SyncConfig, ticket: Omit<Ticket,
   const queueItem = await addToSyncQueueInDb({
     id: generateTempId('TEMP'),
     action: 'CREATE_TICKET',
-    customerId: ticket.customerId,
+    customerId: effectiveCustomerId,
     payload: newTicket
   });
 
@@ -894,9 +908,23 @@ export async function queueDeleteTicket(config: SyncConfig, id: string): Promise
 
 // CREATE FOLLOW-UP
 export async function queueCreateFollowUp(config: SyncConfig, followup: Omit<FollowUp, 'id' | 'createdAt'>): Promise<{ success: boolean; followUp: FollowUp }> {
+  let effectiveCustomerId = followup.customerId;
+  let name = followup.name || '';
+  let mobileNumber = followup.mobileNumber || '';
+
+  const customer = memoryCustomers.find(c => c.id === effectiveCustomerId || (c.mobileNumber && c.mobileNumber === mobileNumber) || (c.name && c.name === name));
+  if (customer) {
+    effectiveCustomerId = customer.id;
+    if (!name) name = customer.name;
+    if (!mobileNumber) mobileNumber = customer.mobileNumber;
+  }
+
   const tempId = generateTempId('FUP-TEMP');
   const newFollowUp: FollowUp = {
     ...followup,
+    customerId: effectiveCustomerId,
+    name,
+    mobileNumber,
     id: tempId,
     createdAt: new Date().toISOString()
   };
@@ -912,7 +940,7 @@ export async function queueCreateFollowUp(config: SyncConfig, followup: Omit<Fol
   const queueItem = await addToSyncQueueInDb({
     id: generateTempId('TEMP'),
     action: 'CREATE_FOLLOWUP',
-    customerId: followup.customerId,
+    customerId: effectiveCustomerId,
     payload: newFollowUp
   });
 
@@ -1254,36 +1282,52 @@ async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise
       id: item.customerId
     };
   } else if (item.action === 'CREATE_TICKET') {
+    let effectiveCustomerId = item.customerId || item.payload?.customerId || '';
+    const custInMem = memoryCustomers.find(c => c.id === effectiveCustomerId || (c.mobileNumber && c.mobileNumber === item.payload?.mobileNumber));
+    if (custInMem && !custInMem.id.startsWith('TEMP')) {
+      effectiveCustomerId = custInMem.id;
+    }
+    const name = item.payload?.name || custInMem?.name || '';
+    const mobileNumber = item.payload?.mobileNumber || custInMem?.mobileNumber || '';
+
     payload = {
       action: 'create_ticket',
-      customerId: item.customerId,
-      name: item.payload.name,
-      mobileNumber: item.payload.mobileNumber,
-      conversationDescription: item.payload.conversationDescription,
-      status: item.payload.status
+      customerId: effectiveCustomerId,
+      name: name,
+      mobileNumber: mobileNumber,
+      conversationDescription: item.payload?.conversationDescription || '',
+      status: item.payload?.status || 'Open'
     };
   } else if (item.action === 'UPDATE_TICKET') {
     payload = {
       action: 'update_ticket',
-      id: item.payload.id,
-      conversationDescription: item.payload.conversationDescription,
-      status: item.payload.status
+      id: item.payload?.id || '',
+      conversationDescription: item.payload?.conversationDescription || '',
+      status: item.payload?.status || 'Open'
     };
   } else if (item.action === 'DELETE_TICKET') {
     payload = {
       action: 'delete_ticket',
-      id: item.payload.id
+      id: item.payload?.id || ''
     };
   } else if (item.action === 'CREATE_FOLLOWUP') {
+    let effectiveCustomerId = item.customerId || item.payload?.customerId || '';
+    const custInMem = memoryCustomers.find(c => c.id === effectiveCustomerId || (c.mobileNumber && c.mobileNumber === item.payload?.mobileNumber));
+    if (custInMem && !custInMem.id.startsWith('TEMP')) {
+      effectiveCustomerId = custInMem.id;
+    }
+    const name = item.payload?.name || custInMem?.name || '';
+    const mobileNumber = item.payload?.mobileNumber || custInMem?.mobileNumber || '';
+
     payload = {
       action: 'create_follow_up',
-      customerId: item.customerId,
-      name: item.payload.name,
-      mobileNumber: item.payload.mobileNumber,
-      followUpDate: item.payload.followUpDate,
-      followUpTime: item.payload.followUpTime,
-      notes: item.payload.notes,
-      status: item.payload.status
+      customerId: effectiveCustomerId,
+      name: name,
+      mobileNumber: mobileNumber,
+      followUpDate: item.payload?.followUpDate || '',
+      followUpTime: item.payload?.followUpTime || '10:00',
+      notes: item.payload?.notes || '',
+      status: item.payload?.status || 'Pending'
     };
   } else if (item.action === 'UPDATE_FOLLOWUP') {
     payload = {
@@ -1356,10 +1400,12 @@ async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise
         await saveFollowUpsToDb(memoryFollowUps);
 
         for (const qItem of memorySyncQueue) {
-          if (qItem.customerId === temporaryId) {
+          if (qItem.customerId === temporaryId || (qItem.payload && qItem.payload.customerId === temporaryId)) {
             qItem.customerId = permanentId;
-            if (qItem.payload && qItem.payload.customerId === temporaryId) {
+            if (qItem.payload) {
               qItem.payload.customerId = permanentId;
+              if (!qItem.payload.name && resData.customer.name) qItem.payload.name = resData.customer.name;
+              if (!qItem.payload.mobileNumber && resData.customer.mobileNumber) qItem.payload.mobileNumber = resData.customer.mobileNumber;
             }
             await updateSyncQueueItemInDb(qItem);
           }

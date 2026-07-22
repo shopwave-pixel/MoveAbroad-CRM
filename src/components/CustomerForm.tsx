@@ -60,6 +60,13 @@ interface CustomerFormProps {
     gender?: string,
     additionalNumbers?: AdditionalNumber[]
   ) => Promise<any>;
+  onCreateTicket?: (
+    customerId: string,
+    name: string,
+    mobileNumber: string,
+    conversationDescription: string,
+    status: Ticket['status']
+  ) => Promise<{ success: boolean; ticket?: Ticket; error?: string }>;
   syncConfig?: SyncConfig;
 }
 

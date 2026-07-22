@@ -504,6 +504,22 @@ export default function App() {
       if (res.success && res.customer) {
         setCustomers(prev => [...prev, res.customer!]);
         logCustomerActivity(res.customer.id, effectiveUser?.fullName || 'Staff', 'Customer Created', `Profile created with primary mobile: ${mobileNumber}`);
+
+        // Automatically create initial open support ticket if conversation remarks exist
+        if (remarks && remarks.trim()) {
+          const tktRes = await createTicket(
+            config, 
+            res.customer.id, 
+            res.customer.name, 
+            res.customer.mobileNumber, 
+            remarks.trim(), 
+            'Open'
+          );
+          if (tktRes.success && tktRes.ticket) {
+            setTickets(prev => [...prev, tktRes.ticket!]);
+            logCustomerActivity(res.customer.id, effectiveUser?.fullName || 'Staff', 'Ticket Created', `Opened initial support ticket ${tktRes.ticket.id}: "${remarks.trim()}"`);
+          }
+        }
       }
       return res;
     });
@@ -1099,6 +1115,7 @@ export default function App() {
               onArchiveCustomer={handleArchiveCustomer}
               onRestoreCustomer={handleRestoreCustomer}
               onPermanentDeleteCustomer={handlePermanentDeleteCustomer}
+              onCreateTicket={handleCreateTicket}
               currentUser={effectiveUser}
             />
           </div>
@@ -1175,6 +1192,7 @@ export default function App() {
                       followUps={followUps}
                       onArchiveCustomer={handleArchiveCustomer}
                       onUpdateCustomer={handleUpdateCustomer}
+                      onCreateTicket={handleCreateTicket}
                       syncConfig={config}
                     />
                   </div>
