@@ -1227,6 +1227,18 @@ const CustomerDetails = React.memo(function CustomerDetails({
                       <span>ARCHIVED</span>
                     </span>
 
+                    {currentUser?.role === 'Admin' && onRestoreCustomer && (
+                      <button
+                        onClick={() => setIsConfirmRestoring(true)}
+                        id="btn-restore-customer-details"
+                        className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] rounded-full shadow-md shadow-emerald-600/15 transition-all cursor-pointer active:scale-95"
+                        title="Restore Customer to Active Directory"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>RESTORE CUSTOMER</span>
+                      </button>
+                    )}
+
                     {currentUser?.role === 'Admin' && (
                       <button
                         onClick={() => setIsConfirmPermanentDeleting(true)}

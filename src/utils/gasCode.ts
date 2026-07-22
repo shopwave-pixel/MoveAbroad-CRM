@@ -28,13 +28,15 @@ function doGet(e) {
       const tickets = getTickets(sheets.ticketsSheet);
       const followUps = getFollowUps(sheets.followUpsSheet);
       const users = getUsers(sheets.usersSheet);
+      const archivedCustomers = getArchivedCustomers(sheets.archivedCustomersSheet);
       
       return jsonResponse({
         success: true,
         customers: customers,
         tickets: tickets,
         followUps: followUps,
-        users: users
+        users: users,
+        archivedCustomers: archivedCustomers
       });
     }
     
