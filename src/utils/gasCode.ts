@@ -112,7 +112,9 @@ function doGet(e) {
 
 // Handle POST requests
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
+    lock.tryLock(30000);
     let payload = {};
     if (e.postData && e.postData.contents) {
       payload = JSON.parse(e.postData.contents);
@@ -831,6 +833,12 @@ function doPost(e) {
       success: false,
       error: err.toString()
     });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (e) {
+      // Ignore lock release error
+    }
   }
 }
 
