@@ -35,6 +35,7 @@ interface SettingsPanelProps {
   archivedCount?: number;
   onOpenArchivedCustomers?: () => void;
   onOpenArchivedAuditLogs?: () => void;
+  onOpenDuplicateManagement?: () => void;
   lastSyncTime?: Date | null;
   syncStatus?: 'CONNECTING' | 'LIVE' | 'SYNCING' | 'OFFLINE';
   isOnline?: boolean;
@@ -66,6 +67,7 @@ export default function SettingsPanel({
   archivedCount = 0,
   onOpenArchivedCustomers,
   onOpenArchivedAuditLogs,
+  onOpenDuplicateManagement,
   lastSyncTime,
   syncStatus = 'LIVE',
   isOnline = true
@@ -255,10 +257,12 @@ export default function SettingsPanel({
                   <SettingsCard
                     id="card-duplicate-management"
                     icon={Copy}
+                    iconBg="bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400"
                     title="Duplicate Management"
-                    description="Automated duplicate detection and contact merge tools"
-                    badge={{ text: 'Coming Soon', variant: 'comingSoon' }}
-                    clickable={false}
+                    description="Enterprise duplicate detection, side-by-side comparison & contact merge center"
+                    badge={{ text: 'ACTIVE', variant: 'success' }}
+                    onClick={onOpenDuplicateManagement}
+                    clickable={true}
                   />
 
                   {/* 1.3 Import / Export */}

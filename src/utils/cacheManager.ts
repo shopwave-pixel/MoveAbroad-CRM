@@ -677,8 +677,25 @@ export async function queueArchiveCustomer(config: SyncConfig, id: string, userF
   await saveCustomersToDb(memoryCustomers);
   notifySubscribers();
 
-  // 3. Queue background update
-  await queueUpdateCustomer(config, id, updates);
+  // 3. Queue ARCHIVE_CUSTOMER action
+  const queueItem = await addToSyncQueueInDb({
+    id: generateTempId('TEMP'),
+    action: 'ARCHIVE_CUSTOMER',
+    customerId: id,
+    payload: {
+      id,
+      archivedBy: userFullName,
+      archivedAt: archiveTime,
+      archiveReason: 'Manual Archive'
+    }
+  });
+
+  memorySyncQueue = [...memorySyncQueue, queueItem];
+  syncStatus = 'PENDING';
+  notifySubscribers();
+
+  // 4. Trigger Sync
+  triggerAutoSync();
 
   const updated = memoryCustomers.find(c => c.id === id);
   return { success: true, customer: updated };
@@ -705,8 +722,24 @@ export async function queueRestoreCustomer(config: SyncConfig, id: string, userF
   await saveCustomersToDb(memoryCustomers);
   notifySubscribers();
 
-  // 3. Queue background update
-  await queueUpdateCustomer(config, id, updates);
+  // 3. Queue RESTORE_CUSTOMER action
+  const queueItem = await addToSyncQueueInDb({
+    id: generateTempId('TEMP'),
+    action: 'RESTORE_CUSTOMER',
+    customerId: id,
+    payload: {
+      id,
+      restoredBy: userFullName,
+      restoredAt: restoreTime
+    }
+  });
+
+  memorySyncQueue = [...memorySyncQueue, queueItem];
+  syncStatus = 'PENDING';
+  notifySubscribers();
+
+  // 4. Trigger Sync
+  triggerAutoSync();
 
   const updated = memoryCustomers.find(c => c.id === id);
   return { success: true, customer: updated };
@@ -714,7 +747,33 @@ export async function queueRestoreCustomer(config: SyncConfig, id: string, userF
 
 // PERMANENT DELETE CUSTOMER (ADMIN ONLY)
 export async function queuePermanentDeleteCustomer(config: SyncConfig, id: string): Promise<{ success: boolean }> {
-  return queueDeleteCustomer(config, id);
+  // 1. Remove from memory
+  memoryCustomers = memoryCustomers.filter(c => c.id !== id);
+  memoryTickets = memoryTickets.filter(t => t.customerId !== id);
+  memoryFollowUps = memoryFollowUps.filter(f => f.customerId !== id);
+
+  // 2. Save DB Cache
+  await saveCustomersToDb(memoryCustomers);
+  await saveTicketsToDb(memoryTickets);
+  await saveFollowUpsToDb(memoryFollowUps);
+  notifySubscribers();
+
+  // 3. Queue PERMANENT_DELETE_CUSTOMER action
+  const queueItem = await addToSyncQueueInDb({
+    id: generateTempId('TEMP'),
+    action: 'PERMANENT_DELETE_CUSTOMER',
+    customerId: id,
+    payload: { id }
+  });
+
+  memorySyncQueue = [...memorySyncQueue, queueItem];
+  syncStatus = 'PENDING';
+  notifySubscribers();
+
+  // 4. Trigger Sync
+  triggerAutoSync();
+
+  return { success: true };
 }
 
 // CREATE TICKET
@@ -1147,6 +1206,26 @@ async function processSyncItem(config: SyncConfig, item: SyncQueueItem): Promise
   } else if (item.action === 'DELETE_CUSTOMER') {
     payload = {
       action: 'delete_customer',
+      id: item.customerId
+    };
+  } else if (item.action === 'ARCHIVE_CUSTOMER') {
+    payload = {
+      action: 'archive_customer',
+      id: item.customerId,
+      archivedBy: item.payload?.archivedBy || 'Staff',
+      archivedAt: item.payload?.archivedAt || new Date().toISOString(),
+      archiveReason: item.payload?.archiveReason || 'Manual Archive'
+    };
+  } else if (item.action === 'RESTORE_CUSTOMER') {
+    payload = {
+      action: 'restore_customer',
+      id: item.customerId,
+      restoredBy: item.payload?.restoredBy || 'Staff',
+      restoredAt: item.payload?.restoredAt || new Date().toISOString()
+    };
+  } else if (item.action === 'PERMANENT_DELETE_CUSTOMER') {
+    payload = {
+      action: 'permanent_delete_customer',
       id: item.customerId
     };
   } else if (item.action === 'CREATE_TICKET') {

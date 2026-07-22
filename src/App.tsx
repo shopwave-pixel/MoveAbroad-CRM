@@ -47,6 +47,7 @@ import LoginScreen from './components/LoginScreen';
 import SetupWizard from './components/SetupWizard';
 import UserManagement from './components/UserManagement';
 import AdminDebug from './components/AdminDebug';
+import DuplicateManagementCenter from './components/DuplicateManagementCenter';
 
 const ArchivedCustomersView = React.lazy(() => import('./components/ArchivedCustomersView'));
 
@@ -174,7 +175,7 @@ export default function App() {
 
   // Navigation & View States
   const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'tickets' | 'followups' | 'settings' | 'users' | 'debug'>('dashboard');
-  const [settingsSubView, setSettingsSubView] = useState<'main' | 'archived'>('main');
+  const [settingsSubView, setSettingsSubView] = useState<'main' | 'archived' | 'duplicates'>('main');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string>('');
   const [isAddingCustomerInline, setIsAddingCustomerInline] = useState(false);
@@ -1239,10 +1240,23 @@ export default function App() {
               </div>
             )}
 
-             {/* 5. Settings Configuration View & Nested Archived Customers Repository */}
+             {/* 5. Settings Configuration View & Nested Subviews */}
             {activeTab === 'settings' && (
-              <div className="max-w-3xl mx-auto">
-                {settingsSubView === 'archived' ? (
+              <div className={settingsSubView === 'duplicates' ? "max-w-5xl mx-auto" : "max-w-3xl mx-auto"}>
+                {settingsSubView === 'duplicates' ? (
+                  <DuplicateManagementCenter
+                    customers={customers}
+                    tickets={tickets}
+                    followUps={followUps}
+                    currentUser={effectiveUser}
+                    config={config}
+                    onRefreshData={handleManualSync}
+                    onSelectCustomer={handleSelectCustomer}
+                    onUpdateCustomer={handleUpdateCustomer}
+                    onArchiveCustomer={handleArchiveCustomer}
+                    onBack={() => setSettingsSubView('main')}
+                  />
+                ) : settingsSubView === 'archived' ? (
                   <React.Suspense fallback={
                     <div className="p-12 text-center bg-white dark:bg-[#1a1a15] rounded-2xl border border-gray-200 dark:border-[#8a8a70]/20 space-y-3">
                       <div className="w-8 h-8 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -1274,6 +1288,7 @@ export default function App() {
                     archivedCount={customers.filter(c => c.isArchived).length}
                     onOpenArchivedCustomers={() => setSettingsSubView('archived')}
                     onOpenArchivedAuditLogs={() => setSettingsSubView('archived')}
+                    onOpenDuplicateManagement={() => setSettingsSubView('duplicates')}
                     lastSyncTime={lastSyncTime}
                     syncStatus={syncStatus}
                     isOnline={isOnline}

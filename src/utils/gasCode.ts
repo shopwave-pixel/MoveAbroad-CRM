@@ -46,11 +46,19 @@ function doGet(e) {
       });
     }
 
-    if (action === 'getCustomers' || action === 'get_customers') {
+    if (action === 'get_customers') {
       const customers = getCustomers(sheets.customersSheet);
       return jsonResponse({
         success: true,
         customers: customers
+      });
+    }
+
+    if (action === 'get_archived_customers') {
+      const archived = getArchivedCustomers(sheets.archivedCustomersSheet);
+      return jsonResponse({
+        success: true,
+        customers: archived
       });
     }
     
@@ -479,6 +487,136 @@ function doPost(e) {
       }
     }
 
+    if (action === 'archive_customer') {
+      const id = payload.id;
+      const archivedBy = (payload.archivedBy || 'Staff').trim();
+      const archiveReason = (payload.archiveReason || 'Manual Archive').trim();
+      const archivedAt = payload.archivedAt || new Date().toISOString();
+
+      if (!id) {
+        return jsonResponse({ success: false, error: "Customer ID is required." });
+      }
+
+      const customers = getCustomers(sheets.customersSheet);
+      const targetCustomer = customers.find(c => c.id === id);
+
+      if (!targetCustomer) {
+        return jsonResponse({ success: false, error: "Customer not found in Customers sheet." });
+      }
+
+      // 1. Update Customers sheet Status to 'Archived'
+      const updated = updateRowById(sheets.customersSheet, id, "Customer ID", {
+        "Status": "Archived",
+        "Archived At": archivedAt,
+        "Archived By": archivedBy
+      });
+
+      if (!updated) {
+        return jsonResponse({ success: false, error: "Failed to update Customer status in Google Sheets." });
+      }
+
+      // 2. Add entry into Archived Customers sheet
+      const archivedList = getArchivedCustomers(sheets.archivedCustomersSheet);
+      let nextNum = 1;
+      if (archivedList.length > 0) {
+        const nums = archivedList.map(a => {
+          const match = (a.archiveId || '').match(/ARC-(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        });
+        nextNum = Math.max(...nums) + 1;
+      }
+      const archiveId = "ARC-" + nextNum.toString().padStart(6, '0');
+
+      appendRowByHeader(sheets.archivedCustomersSheet, {
+        "Archive ID": archiveId,
+        "Customer ID": targetCustomer.id,
+        "Full Name": targetCustomer.name,
+        "Mobile Number": targetCustomer.mobileNumber,
+        "WhatsApp Number": targetCustomer.whatsAppNumber || '',
+        "IMO Number": targetCustomer.imoNumber || '',
+        "Email": '',
+        "Customer Category": targetCustomer.customerCategory || '',
+        "Address": targetCustomer.address || '',
+        "Gender": targetCustomer.gender || '',
+        "Destination Country": targetCustomer.destinationCountry || '',
+        "Source": targetCustomer.source || '',
+        "Remarks": targetCustomer.remarks || '',
+        "Created At": targetCustomer.createdAt || '',
+        "Archived At": archivedAt,
+        "Archived By": archivedBy,
+        "Archive Reason": archiveReason,
+        "Original Customer ID": targetCustomer.id,
+        "Status": "Archived"
+      });
+
+      SpreadsheetApp.flush();
+
+      return jsonResponse({
+        success: true,
+        archiveId: archiveId,
+        customerId: id,
+        message: "Customer successfully archived into Archived Customers sheet."
+      });
+    }
+
+    if (action === 'restore_customer') {
+      const id = payload.id;
+      const restoredBy = (payload.restoredBy || 'Staff').trim();
+      const restoredAt = payload.restoredAt || new Date().toISOString();
+
+      if (!id) {
+        return jsonResponse({ success: false, error: "Customer ID is required." });
+      }
+
+      // 1. Update Customers sheet Status back to 'Active'
+      const updated = updateRowById(sheets.customersSheet, id, "Customer ID", {
+        "Status": "Active",
+        "Restored At": restoredAt,
+        "Restored By": restoredBy
+      });
+
+      if (!updated) {
+        return jsonResponse({ success: false, error: "Customer not found in Customers sheet." });
+      }
+
+      // 2. Remove entry from Archived Customers sheet
+      deleteRowById(sheets.archivedCustomersSheet, id, "Customer ID");
+      deleteRowById(sheets.archivedCustomersSheet, id, "Original Customer ID");
+
+      SpreadsheetApp.flush();
+
+      return jsonResponse({
+        success: true,
+        customerId: id,
+        message: "Customer successfully restored to Active status."
+      });
+    }
+
+    if (action === 'permanent_delete_customer') {
+      const id = payload.id;
+      if (!id) {
+        return jsonResponse({ success: false, error: "Customer ID is required." });
+      }
+
+      // 1. Delete from Customers sheet
+      deleteRowById(sheets.customersSheet, id, "Customer ID");
+
+      // 2. Delete from Archived Customers sheet
+      deleteRowById(sheets.archivedCustomersSheet, id, "Customer ID");
+      deleteRowById(sheets.archivedCustomersSheet, id, "Original Customer ID");
+
+      // 3. Delete associated records
+      deleteCascadeByCustomerId(sheets, id);
+
+      SpreadsheetApp.flush();
+
+      return jsonResponse({
+        success: true,
+        customerId: id,
+        message: "Customer permanently deleted from system."
+      });
+    }
+
     // --- TICKET ACTIONS ---
     if (action === 'create_ticket') {
       const customerId = (payload.customerId || '').trim();
@@ -705,7 +843,7 @@ function setupSheets() {
     },
     {
       name: "Customers",
-      headers: ["Customer ID", "Full Name", "Mobile Number", "WhatsApp Number", "Destination Country", "Source", "Remarks", "Created At", "Customer Category", "Address", "Gender"]
+      headers: ["Customer ID", "Full Name", "Mobile Number", "WhatsApp Number", "Destination Country", "Source", "Remarks", "Created At", "Customer Category", "Address", "Gender", "Status", "Archived At", "Archived By", "Restored At", "Restored By"]
     },
     {
       name: "Tickets",
@@ -888,6 +1026,9 @@ function getCustomers(sheet) {
       const idx = headers.indexOf(colName);
       return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
     };
+
+    const statusVal = getVal("Status", "Active");
+    const isArchived = statusVal.toLowerCase() === 'archived' || getVal("Is Archived").toLowerCase() === 'true';
     
     return {
       id: getVal("Customer ID"),
@@ -900,7 +1041,52 @@ function getCustomers(sheet) {
       createdAt: getVal("Created At"),
       customerCategory: getVal("Customer Category"),
       address: getVal("Address"),
-      gender: getVal("Gender")
+      gender: getVal("Gender"),
+      status: statusVal,
+      isArchived: isArchived,
+      archivedAt: getVal("Archived At"),
+      archivedBy: getVal("Archived By"),
+      restoredAt: getVal("Restored At"),
+      restoredBy: getVal("Restored By")
+    };
+  });
+}
+
+// Fetch all archived customers as JSON objects using dynamic header mapping
+function getArchivedCustomers(sheet) {
+  if (!sheet) return [];
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+
+  const headers = data[0].map(h => String(h).trim());
+  const rows = data.slice(1);
+
+  return rows.map(row => {
+    const getVal = (colName, defaultVal = '') => {
+      const idx = headers.indexOf(colName);
+      return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
+    };
+
+    return {
+      archiveId: getVal("Archive ID"),
+      id: getVal("Customer ID") || getVal("Original Customer ID"),
+      name: getVal("Full Name"),
+      mobileNumber: getVal("Mobile Number"),
+      whatsAppNumber: getVal("WhatsApp Number"),
+      imoNumber: getVal("IMO Number"),
+      email: getVal("Email"),
+      customerCategory: getVal("Customer Category"),
+      address: getVal("Address"),
+      gender: getVal("Gender"),
+      destinationCountry: getVal("Destination Country"),
+      source: getVal("Source"),
+      remarks: getVal("Remarks"),
+      createdAt: getVal("Created At"),
+      archivedAt: getVal("Archived At"),
+      archivedBy: getVal("Archived By"),
+      archiveReason: getVal("Archive Reason"),
+      isArchived: true,
+      status: "Archived"
     };
   });
 }

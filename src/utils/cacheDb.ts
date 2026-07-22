@@ -35,7 +35,7 @@ function decrypt(cipherText: string): string {
 
 export interface SyncQueueItem {
   id: string;
-  action: 'CREATE_CUSTOMER' | 'EDIT_CUSTOMER' | 'DELETE_CUSTOMER' | 'CREATE_TICKET' | 'UPDATE_TICKET' | 'DELETE_TICKET' | 'CREATE_FOLLOWUP' | 'UPDATE_FOLLOWUP' | 'DELETE_FOLLOWUP';
+  action: 'CREATE_CUSTOMER' | 'EDIT_CUSTOMER' | 'DELETE_CUSTOMER' | 'ARCHIVE_CUSTOMER' | 'RESTORE_CUSTOMER' | 'PERMANENT_DELETE_CUSTOMER' | 'CREATE_TICKET' | 'UPDATE_TICKET' | 'DELETE_TICKET' | 'CREATE_FOLLOWUP' | 'UPDATE_FOLLOWUP' | 'DELETE_FOLLOWUP';
   customerId: string;
   timestamp: string;
   payload: any;
