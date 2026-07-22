@@ -47,6 +47,45 @@ function doGet(e) {
         archivedCustomers: archivedCustomers
       });
     }
+
+    if (action === 'get_dashboard_data') {
+      const customers = getCustomers(sheets.customersSheet);
+      const tickets = getTickets(sheets.ticketsSheet);
+      const followUps = getFollowUps(sheets.followUpsSheet);
+      
+      const totalCustomers = customers.length;
+      const openTickets = tickets.filter(t => (t.status || '').toLowerCase() === 'open').length;
+      const pendingFollowups = followUps.filter(f => (f.status || '').toLowerCase() === 'pending').length;
+      
+      return jsonResponse({
+        success: true,
+        stats: {
+          totalCustomers,
+          openTickets,
+          pendingFollowups,
+          totalTickets: tickets.length,
+          totalFollowups: followUps.length
+        },
+        recentTickets: tickets.slice(-10).reverse(),
+        recentFollowups: followUps.slice(-10).reverse()
+      });
+    }
+
+    if (action === 'get_tickets') {
+      const tickets = getTickets(sheets.ticketsSheet);
+      return jsonResponse({
+        success: true,
+        tickets: tickets
+      });
+    }
+
+    if (action === 'get_followups') {
+      const followUps = getFollowUps(sheets.followUpsSheet);
+      return jsonResponse({
+        success: true,
+        followUps: followUps
+      });
+    }
     
     if (action === 'get_users') {
       const users = getUsers(sheets.usersSheet);
@@ -58,9 +97,20 @@ function doGet(e) {
 
     if (action === 'get_customers') {
       const customers = getCustomers(sheets.customersSheet);
+      const active = customers.filter(c => !c.isArchived && !c.permanentlyDeletedAt && (c.status || '').toLowerCase() !== 'archived' && (c.status || '').toLowerCase() !== 'disabled' && (c.status || '').toLowerCase() !== 'inactive' && (c.status || '').toLowerCase() !== 'deleted');
       return jsonResponse({
         success: true,
-        customers: customers
+        customers: customers,
+        activeCustomers: active
+      });
+    }
+
+    if (action === 'get_active_customers') {
+      const customers = getCustomers(sheets.customersSheet);
+      const active = customers.filter(c => !c.isArchived && !c.permanentlyDeletedAt && (c.status || '').toLowerCase() !== 'archived' && (c.status || '').toLowerCase() !== 'disabled' && (c.status || '').toLowerCase() !== 'inactive' && (c.status || '').toLowerCase() !== 'deleted');
+      return jsonResponse({
+        success: true,
+        customers: active
       });
     }
 
@@ -993,17 +1043,22 @@ function setupSheets() {
     }
   }
 
+  const allSheets = ss.getSheets();
+  const sheetMap = {};
+  for (let i = 0; i < allSheets.length; i++) {
+    sheetMap[allSheets[i].getName()] = allSheets[i];
+  }
+
   const resultSheets = {};
 
   for (let i = 0; i < sheetDefinitions.length; i++) {
     const def = sheetDefinitions[i];
-    let sheet = ss.getSheetByName(def.name);
+    let sheet = sheetMap[def.name];
     if (!sheet) {
       sheet = ss.insertSheet(def.name);
       sheet.appendRow(def.headers);
       sheet.getRange(1, 1, 1, def.headers.length).setFontWeight("bold");
-    } else {
-      ensureSheetHeaders(sheet, def.headers);
+      sheetMap[def.name] = sheet;
     }
 
     if (def.name === "Users") resultSheets.usersSheet = sheet;
@@ -1031,9 +1086,24 @@ function setupSheets() {
   return resultSheets;
 }
 
+// Global execution cache for sheet data
+var _sheetDataCache = {};
+
+function getSheetDataCached(sheet) {
+  if (!sheet) return [];
+  const sName = sheet.getName();
+  if (_sheetDataCache[sName]) {
+    return _sheetDataCache[sName];
+  }
+  const data = sheet.getDataRange().getValues();
+  _sheetDataCache[sName] = data;
+  return data;
+}
+
 // Fetch all users as JSON objects using dynamic header mapping
 function getUsers(sheet) {
-  const data = sheet.getDataRange().getValues();
+  if (!sheet) return [];
+  const data = getSheetDataCached(sheet);
   if (data.length <= 1) return [];
   
   const headers = data[0].map(h => String(h).trim());
@@ -1057,7 +1127,8 @@ function getUsers(sheet) {
 
 // Fetch all customers as JSON objects using dynamic header mapping
 function getCustomers(sheet) {
-  const data = sheet.getDataRange().getValues();
+  if (!sheet) return [];
+  const data = getSheetDataCached(sheet);
   if (data.length <= 1) return [];
   
   const headers = data[0].map(h => String(h).trim());
@@ -1097,7 +1168,7 @@ function getCustomers(sheet) {
 // Fetch all archived customers as JSON objects using dynamic header mapping
 function getArchivedCustomers(sheet) {
   if (!sheet) return [];
-  const data = sheet.getDataRange().getValues();
+  const data = getSheetDataCached(sheet);
   if (data.length <= 1) return [];
 
   const headers = data[0].map(h => String(h).trim());
@@ -1135,7 +1206,8 @@ function getArchivedCustomers(sheet) {
 
 // Fetch all tickets as JSON objects using dynamic header mapping
 function getTickets(sheet) {
-  const data = sheet.getDataRange().getValues();
+  if (!sheet) return [];
+  const data = getSheetDataCached(sheet);
   if (data.length <= 1) return [];
   
   const headers = data[0].map(h => String(h).trim());
@@ -1159,7 +1231,8 @@ function getTickets(sheet) {
 
 // Fetch all followups as JSON objects using dynamic header mapping
 function getFollowUps(sheet) {
-  const data = sheet.getDataRange().getValues();
+  if (!sheet) return [];
+  const data = getSheetDataCached(sheet);
   if (data.length <= 1) return [];
   
   const headers = data[0].map(h => String(h).trim());

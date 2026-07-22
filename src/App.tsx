@@ -414,12 +414,6 @@ export default function App() {
         setLastSyncTime(new Date());
         
         if (syncResult.hasChanges) {
-          // Refresh list views with merged/new data (Partial Update)
-          const refreshed = await fetchCRMData(currentConfig);
-          setCustomers(refreshed.customers);
-          setTickets(refreshed.tickets);
-          setFollowUps(refreshed.followUps || []);
-
           // Temporarily register newly updated IDs to trigger green flash hover highlights
           if (syncResult.updatedIds && syncResult.updatedIds.length > 0) {
             const updatedSet = new Set(syncResult.updatedIds);

@@ -222,8 +222,72 @@ function notifyConflicts() {
 
 // --- CORE CACHE MANAGER INTERFACE ---
 
+// Helper fetch with timeout and automatic retry with exponential backoff
+async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 2, timeoutMs = 6000): Promise<Response> {
+  let attempt = 0;
+  let lastError: any;
+
+  while (attempt <= maxRetries) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (response.ok) {
+        return response;
+      }
+      if (attempt < maxRetries) {
+        await new Promise(res => setTimeout(res, 300 * Math.pow(2, attempt)));
+      } else {
+        return response;
+      }
+    } catch (err: any) {
+      clearTimeout(timer);
+      lastError = err;
+      if (attempt < maxRetries) {
+        await new Promise(res => setTimeout(res, 300 * Math.pow(2, attempt)));
+      }
+    }
+    attempt++;
+  }
+  throw lastError || new Error("Request timed out or failed after retries");
+}
+
+// Global Mutex / Lock guard for sync operations to prevent multiple simultaneous syncs
+let activeSyncPromise: Promise<{
+  success: boolean;
+  hasChanges: boolean;
+  addedCount: number;
+  updatedCount: number;
+  deletedCount: number;
+  updatedIds: string[];
+}> | null = null;
+
 // Smart background sync that performs detailed client-server comparison and applies partial updates
 export async function performSmartSync(config: SyncConfig): Promise<{
+  success: boolean;
+  hasChanges: boolean;
+  addedCount: number;
+  updatedCount: number;
+  deletedCount: number;
+  updatedIds: string[];
+}> {
+  if (activeSyncPromise) {
+    return activeSyncPromise;
+  }
+
+  activeSyncPromise = executeSmartSync(config).finally(() => {
+    activeSyncPromise = null;
+  });
+
+  return activeSyncPromise;
+}
+
+async function executeSmartSync(config: SyncConfig): Promise<{
   success: boolean;
   hasChanges: boolean;
   addedCount: number;
@@ -246,12 +310,13 @@ export async function performSmartSync(config: SyncConfig): Promise<{
     syncStatus = 'SYNCING';
     notifySubscribers();
 
-    const url = `${config.webAppUrl}?action=get_data`;
-    const response = await fetch(url, {
+    const since = lastSyncTime ? lastSyncTime.getTime() : 0;
+    const url = `${config.webAppUrl}?action=get_data&since=${since}`;
+    const response = await fetchWithRetry(url, {
       method: 'GET',
       mode: 'cors',
       headers: { 'Accept': 'application/json' }
-    });
+    }, 2, 6000);
 
     if (!response.ok) {
       throw new Error(`HTTP Error ${response.status}`);
@@ -383,6 +448,85 @@ export async function performSmartSync(config: SyncConfig): Promise<{
       updatedIds: []
     };
   }
+}
+
+// Independent entity fetchers
+export async function fetchActiveCustomersOnly(config: SyncConfig): Promise<Customer[]> {
+  if (!config.webAppUrl) {
+    return memoryCustomers.filter(c => !c.isArchived && !c.permanentlyDeletedAt && (c as any).status !== 'Archived' && (c as any).status !== 'Disabled' && (c as any).status !== 'Inactive' && (c as any).status !== 'Deleted');
+  }
+  try {
+    const res = await fetchWithRetry(`${config.webAppUrl}?action=get_active_customers`, { method: 'GET' });
+    const json = await res.json();
+    if (json.success && json.customers) {
+      return json.customers;
+    }
+  } catch (e) {
+    console.error("fetchActiveCustomersOnly failed:", e);
+  }
+  return memoryCustomers.filter(c => !c.isArchived && !c.permanentlyDeletedAt && (c as any).status !== 'Archived' && (c as any).status !== 'Disabled' && (c as any).status !== 'Inactive' && (c as any).status !== 'Deleted');
+}
+
+export async function fetchCustomersOnly(config: SyncConfig): Promise<Customer[]> {
+  if (!config.webAppUrl) return memoryCustomers;
+  try {
+    const res = await fetchWithRetry(`${config.webAppUrl}?action=get_customers`, { method: 'GET' });
+    const json = await res.json();
+    if (json.success && json.customers) {
+      memoryCustomers = json.customers;
+      await saveCustomersToDb(memoryCustomers);
+      notifySubscribers();
+    }
+  } catch (e) {
+    console.error("fetchCustomersOnly failed:", e);
+  }
+  return memoryCustomers;
+}
+
+export async function fetchTicketsOnly(config: SyncConfig): Promise<Ticket[]> {
+  if (!config.webAppUrl) return memoryTickets;
+  try {
+    const res = await fetchWithRetry(`${config.webAppUrl}?action=get_tickets`, { method: 'GET' });
+    const json = await res.json();
+    if (json.success && json.tickets) {
+      memoryTickets = json.tickets;
+      await saveTicketsToDb(memoryTickets);
+      notifySubscribers();
+    }
+  } catch (e) {
+    console.error("fetchTicketsOnly failed:", e);
+  }
+  return memoryTickets;
+}
+
+export async function fetchFollowUpsOnly(config: SyncConfig): Promise<FollowUp[]> {
+  if (!config.webAppUrl) return memoryFollowUps;
+  try {
+    const res = await fetchWithRetry(`${config.webAppUrl}?action=get_followups`, { method: 'GET' });
+    const json = await res.json();
+    if (json.success && json.followUps) {
+      memoryFollowUps = json.followUps;
+      await saveFollowUpsToDb(memoryFollowUps);
+      notifySubscribers();
+    }
+  } catch (e) {
+    console.error("fetchFollowUpsOnly failed:", e);
+  }
+  return memoryFollowUps;
+}
+
+export async function fetchDashboardSummary(config: SyncConfig): Promise<any> {
+  if (!config.webAppUrl) return null;
+  try {
+    const res = await fetchWithRetry(`${config.webAppUrl}?action=get_dashboard_data`, { method: 'GET' });
+    const json = await res.json();
+    if (json.success) {
+      return json;
+    }
+  } catch (e) {
+    console.error("fetchDashboardSummary failed:", e);
+  }
+  return null;
 }
 
 // Load data into memory (loads once from IndexedDB, triggers background load if empty or refresh is true)
@@ -1025,7 +1169,17 @@ export async function queueDeleteFollowUp(config: SyncConfig, id: string): Promi
 
 // --- ACTIVE AUTO SYNC ENGINE ---
 
-export async function triggerAutoSync(manualConfig?: SyncConfig) {
+let autoSyncTimer: any = null;
+
+export function triggerAutoSync(manualConfig?: SyncConfig, delayMs = 300) {
+  if (autoSyncTimer) clearTimeout(autoSyncTimer);
+  autoSyncTimer = setTimeout(() => {
+    autoSyncTimer = null;
+    executeAutoSyncQueue(manualConfig);
+  }, delayMs);
+}
+
+async function executeAutoSyncQueue(manualConfig?: SyncConfig) {
   if (isSyncingActive) return;
   
   const envApiUrl = (import.meta as any).env?.VITE_API_URL || '';

@@ -150,6 +150,27 @@ export async function fetchCRMData(config: SyncConfig): Promise<CRMData> {
   return cacheManager.loadCacheAndSync(config);
 }
 
+// Independent Entity Loaders
+export async function fetchActiveCustomersOnly(config: SyncConfig): Promise<Customer[]> {
+  return cacheManager.fetchActiveCustomersOnly(config);
+}
+
+export async function fetchCustomersOnly(config: SyncConfig): Promise<Customer[]> {
+  return cacheManager.fetchCustomersOnly(config);
+}
+
+export async function fetchTicketsOnly(config: SyncConfig): Promise<Ticket[]> {
+  return cacheManager.fetchTicketsOnly(config);
+}
+
+export async function fetchFollowUpsOnly(config: SyncConfig): Promise<FollowUp[]> {
+  return cacheManager.fetchFollowUpsOnly(config);
+}
+
+export async function fetchDashboardSummary(config: SyncConfig): Promise<any> {
+  return cacheManager.fetchDashboardSummary(config);
+}
+
 // Fetch only customers (For backward compatibility, returns local cache instantly)
 export async function fetchCustomers(config: SyncConfig): Promise<Customer[]> {
   const data = await cacheManager.loadCacheAndSync(config);

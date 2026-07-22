@@ -86,9 +86,16 @@ const Dashboard = React.memo(function Dashboard({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Active non-archived customers
+  // Active non-archived customers (Strictly active)
   const activeCustomers = useMemo(() => {
-    return customers.filter(c => !c.isArchived);
+    return customers.filter(c => 
+      !c.isArchived && 
+      !c.permanentlyDeletedAt && 
+      (c as any).status !== 'Archived' && 
+      (c as any).status !== 'Disabled' && 
+      (c as any).status !== 'Inactive' && 
+      (c as any).status !== 'Deleted'
+    );
   }, [customers]);
 
   const filteredCustomersSearch = useMemo(() => {
@@ -252,12 +259,12 @@ const Dashboard = React.memo(function Dashboard({
       .slice(0, 2);
   }, [customers, tickets, followUps, activityRefreshKey]);
 
-  // Recent data sets (sorted newest first)
+  // Recent data sets (sorted newest first - Active customers only)
   const recentCustomers = useMemo(() => {
-    return [...customers]
+    return [...activeCustomers]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 4);
-  }, [customers]);
+  }, [activeCustomers]);
 
   const recentTickets = useMemo(() => {
     return [...tickets]
@@ -701,7 +708,7 @@ const Dashboard = React.memo(function Dashboard({
                     .toUpperCase();
 
                   const custTickets = tickets.filter(t => t.customerId === c.id);
-                  const custFollowups = followUps.filter(f => f.customerId === f.customerId);
+                  const custFollowups = followUps.filter(f => f.customerId === c.id);
                   const isHighlighted = newlyUpdatedIds?.has(c.id);
 
                   return (
