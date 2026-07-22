@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Customer, AdditionalNumber } from '../types';
-import { AlignLeft, Search, MapPin, Plus, X } from 'lucide-react';
+import { AlignLeft, Search, MapPin, Plus, X, User, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Button, 
@@ -10,6 +10,17 @@ import {
   Card, 
   Alert 
 } from './ui';
+
+export function normalizeMobileNumber(phone: string): string {
+  if (!phone) return '';
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('880')) {
+    digits = '0' + digits.slice(3);
+  } else if (digits.length === 10 && digits.startsWith('1')) {
+    digits = '0' + digits;
+  }
+  return digits;
+}
 
 interface CustomerFormProps {
   onAddCustomer: (
@@ -26,9 +37,10 @@ interface CustomerFormProps {
     additionalNumbers?: AdditionalNumber[]
   ) => Promise<{ success: boolean; customer?: Customer; error?: string }>;
   existingCustomers: Customer[];
+  onSelectCustomer?: (customer: Customer) => void;
 }
 
-export default function CustomerForm({ onAddCustomer, existingCustomers }: CustomerFormProps) {
+export default function CustomerForm({ onAddCustomer, existingCustomers, onSelectCustomer }: CustomerFormProps) {
   const [name, setName] = useState('');
   const [mobileNumberSuffix, setMobileNumberSuffix] = useState('');
   const [additionalNumbers, setAdditionalNumbers] = useState<{ id: string; suffix: string }[]>([]);
@@ -119,6 +131,52 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
   const [isSavedLocal, setIsSavedLocal] = useState(false);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Live calculation for unique customer validation against Local Cache (<50ms)
+  const duplicateCustomer = useMemo(() => {
+    const trimmedName = name.trim().toLowerCase();
+    const cleanMobileSuffix = mobileNumberSuffix.trim();
+    if (!trimmedName || !cleanMobileSuffix) return null;
+
+    const inputNormalizedMobiles = new Set<string>();
+    inputNormalizedMobiles.add(normalizeMobileNumber(cleanMobileSuffix));
+    
+    const cleanWhatsAppSuffix = isSameAsMobile ? cleanMobileSuffix : whatsAppNumberSuffix.trim();
+    if (cleanWhatsAppSuffix) {
+      inputNormalizedMobiles.add(normalizeMobileNumber(cleanWhatsAppSuffix));
+    }
+    
+    const cleanImoSuffix = isImoSameAsMobile ? cleanMobileSuffix : imoNumberSuffix.trim();
+    if (cleanImoSuffix) {
+      inputNormalizedMobiles.add(normalizeMobileNumber(cleanImoSuffix));
+    }
+
+    additionalNumbers.forEach(an => {
+      if (an.suffix.trim()) {
+        inputNormalizedMobiles.add(normalizeMobileNumber(an.suffix));
+      }
+    });
+
+    return existingCustomers.find(c => {
+      const isNameMatch = c.name.trim().toLowerCase() === trimmedName;
+      if (!isNameMatch) return false;
+
+      const existingMobiles = new Set<string>();
+      if (c.mobileNumber) existingMobiles.add(normalizeMobileNumber(c.mobileNumber));
+      if (c.whatsAppNumber) existingMobiles.add(normalizeMobileNumber(c.whatsAppNumber));
+      if (c.imoNumber) existingMobiles.add(normalizeMobileNumber(c.imoNumber));
+      (c.additionalNumbers || []).forEach(an => {
+        if (an.number) existingMobiles.add(normalizeMobileNumber(an.number));
+      });
+
+      for (const mob of inputNormalizedMobiles) {
+        if (mob && existingMobiles.has(mob)) {
+          return true;
+        }
+      }
+      return false;
+    }) || null;
+  }, [name, mobileNumberSuffix, whatsAppNumberSuffix, isSameAsMobile, imoNumberSuffix, isImoSameAsMobile, additionalNumbers, existingCustomers]);
 
   // Sync WhatsApp number if toggle is enabled
   useEffect(() => {
@@ -235,26 +293,12 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
     const formattedWhatsApp = cleanWhatsAppSuffix ? formatPhoneNumber(cleanWhatsAppSuffix) : '';
     const formattedImo = cleanImoSuffix ? formatPhoneNumber(cleanImoSuffix) : '';
 
-    // Check database duplicates
-    const allNormalizedInputNumbers = Array.from(suffixesSeen).map(suffix => `+880${suffix}`);
-    let existsInDb = false;
-    for (const num of allNormalizedInputNumbers) {
-      const digits = num.replace(/\D/g, '');
-      const duplicateCustomer = existingCustomers.find(c => {
-        const mainDigits = c.mobileNumber.replace(/\D/g, '');
-        if (mainDigits === digits) return true;
-        const addDigits = (c.additionalNumbers || []).map(an => an.number.replace(/\D/g, ''));
-        if (addDigits.includes(digits)) return true;
-        return false;
+    // Unique customer check against local cache (Both Name AND Mobile match)
+    if (duplicateCustomer) {
+      setStatus({
+        type: 'error',
+        message: 'This customer already exists.'
       });
-      if (duplicateCustomer) {
-        existsInDb = true;
-        break;
-      }
-    }
-
-    if (existsInDb) {
-      setMobileError('A MOBILE NUMBER ENTERED ALREADY EXISTS IN THE DATABASE');
       return;
     }
 
@@ -349,6 +393,47 @@ export default function CustomerForm({ onAddCustomer, existingCustomers }: Custo
         <Alert variant="success" id="customer-form-success">
           <span className="font-semibold uppercase">{status.message}</span>
         </Alert>
+      )}
+
+      {/* Duplicate Customer Alert Banner */}
+      {duplicateCustomer && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/50 rounded-2xl space-y-3" id="duplicate-customer-alert">
+          <div className="flex items-start gap-3 text-amber-900 dark:text-amber-200">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-sm">This customer already exists.</p>
+              <p className="text-xs text-amber-800 dark:text-amber-300/80 mt-0.5">
+                A customer with the name <span className="font-semibold">{duplicateCustomer.name}</span> and mobile number <span className="font-semibold">{duplicateCustomer.mobileNumber}</span> already exists.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between bg-white dark:bg-[#1a1a15] p-3 rounded-xl border border-amber-200/80 dark:border-amber-800/40">
+            <div className="text-xs space-y-0.5">
+              <p className="font-bold text-[#1F2937] dark:text-[#ecece5] uppercase">{duplicateCustomer.name}</p>
+              <p className="text-[#5A5A40] dark:text-[#8a8a70] font-mono">{duplicateCustomer.mobileNumber}</p>
+              {duplicateCustomer.customerCategory && (
+                <span className="inline-block text-[10px] font-bold bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#8a8a70]/20 dark:text-[#ecece5] px-2 py-0.5 rounded-md mt-1 uppercase">
+                  {duplicateCustomer.customerCategory}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              id="btn-view-existing-customer"
+              onClick={() => {
+                if (onSelectCustomer) {
+                  onSelectCustomer(duplicateCustomer);
+                } else {
+                  window.dispatchEvent(new CustomEvent('select-customer', { detail: duplicateCustomer }));
+                }
+              }}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all shrink-0 flex items-center gap-1.5 active:scale-95"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>View Existing Customer</span>
+            </button>
+          </div>
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5" id="customer-form">

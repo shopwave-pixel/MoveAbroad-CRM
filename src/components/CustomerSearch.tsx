@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Customer, Ticket, FollowUp } from '../types';
-import { ChevronRight, UserPlus, Phone, MessageSquare } from 'lucide-react';
+import { Customer, Ticket, FollowUp, User } from '../types';
+import { ChevronRight, UserPlus, Phone, MessageSquare, Archive } from 'lucide-react';
 import SmartContactActions from './SmartContactActions';
 import InlineCopy from './InlineCopy';
 import CustomerFilterBar from './CustomerFilterBar';
@@ -24,6 +24,10 @@ interface CustomerSearchProps {
   genderFilter: string;
   onGenderFilterChange: (gender: string) => void;
   onAddTicket: (customerId: string) => void;
+  onArchiveCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onRestoreCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onPermanentDeleteCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  currentUser?: User | null;
   isLoading?: boolean;
   newlyUpdatedIds?: Set<string>;
 }
@@ -67,6 +71,10 @@ export default React.memo(function CustomerSearch({
   genderFilter,
   onGenderFilterChange,
   onAddTicket,
+  onArchiveCustomer,
+  onRestoreCustomer,
+  onPermanentDeleteCustomer,
+  currentUser,
   isLoading = false,
   newlyUpdatedIds
 }: CustomerSearchProps) {
@@ -90,8 +98,9 @@ export default React.memo(function CustomerSearch({
   }, [debouncedQuery, categoryFilter, genderFilter]);
 
   // Real-time filtering by Name, Mobile, Customer ID, WhatsApp, IMO, or Ticket ID, combined with category & gender
+  // Exclude archived customers from active customer directory
   const filteredCustomers = useMemo(() => {
-    let result = customers;
+    let result = customers.filter(c => !c.isArchived);
 
     if (categoryFilter) {
       result = result.filter(c => c.customerCategory && c.customerCategory.toUpperCase() === categoryFilter.toUpperCase());
@@ -187,10 +196,10 @@ export default React.memo(function CustomerSearch({
                 onSelectCustomer={onSelectCustomer}
                 onEditCustomer={onSelectCustomer}
                 onAddTicket={onAddTicket}
-                onArchiveCustomer={(id) => {
-                  import('../utils/toast').then(({ showToast }) => {
-                    showToast("ℹ Archive action is only allowed for Administrators");
-                  });
+                onArchiveCustomer={async (id) => {
+                  if (onArchiveCustomer) {
+                    await onArchiveCustomer(id);
+                  }
                 }}
                 isHighlighted={newlyUpdatedIds?.has(c.id)}
               />

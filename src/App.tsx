@@ -6,6 +6,9 @@ import {
   addCustomer, 
   updateCustomer,
   deleteCustomer,
+  archiveCustomer,
+  restoreCustomer,
+  permanentDeleteCustomer,
   createTicket, 
   updateTicket,
   deleteTicket,
@@ -21,6 +24,7 @@ import {
 
 import { subscribeToCache, triggerAutoSync, loadCacheAndSync, performSmartSync } from './utils/cacheManager';
 import { logCustomerActivity } from './utils/activityLogger';
+import { logArchiveAuditEvent } from './utils/archiveAuditLogger';
 import SyncCenter from './components/SyncCenter';
 
 import { 
@@ -44,6 +48,8 @@ import SetupWizard from './components/SetupWizard';
 import UserManagement from './components/UserManagement';
 import AdminDebug from './components/AdminDebug';
 
+const ArchivedCustomersView = React.lazy(() => import('./components/ArchivedCustomersView'));
+
 import { 
   LayoutDashboard,
   Users, 
@@ -61,7 +67,8 @@ import {
   UserPlus,
   Sun,
   Moon,
-  Laptop
+  Laptop,
+  Archive
 } from 'lucide-react';
 
 const AUTH_ENABLED = false;
@@ -92,8 +99,16 @@ export default function App() {
       }
     };
     window.addEventListener('show-toast', handleToastEvent);
+    const handleSelectCustomerEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<Customer>;
+      if (customEvent.detail) {
+        handleSelectCustomer(customEvent.detail);
+      }
+    };
+    window.addEventListener('select-customer', handleSelectCustomerEvent);
     return () => {
       window.removeEventListener('show-toast', handleToastEvent);
+      window.removeEventListener('select-customer', handleSelectCustomerEvent);
     };
   }, []);
 
@@ -133,7 +148,7 @@ export default function App() {
 
   const handleLogoTap = () => {
     // Only available for Admin users
-    if (effectiveUser?.role !== 'Admin') {
+    if (effectiveUser && effectiveUser.role !== 'Admin') {
       return;
     }
 
@@ -143,21 +158,23 @@ export default function App() {
     recentTaps.push(now);
     tapTimestamps.current = recentTaps;
 
-    if (recentTaps.length >= 6) {
+    if (recentTaps.length >= 5) {
       tapTimestamps.current = [];
-      setIsDeveloperMode(true);
-      window.dispatchEvent(
-        new CustomEvent('show-toast', {
-          detail: { message: '🔓 Developer Mode Enabled' }
-        })
-      );
-      // Automatically open the hidden Developer Settings page (debug view)
-      setActiveTab('debug');
+      setIsDeveloperMode((prev) => {
+        const nextState = !prev;
+        window.dispatchEvent(
+          new CustomEvent('show-toast', {
+            detail: { message: nextState ? '🔓 Developer Mode Enabled' : '🔒 Developer Mode Disabled' }
+          })
+        );
+        return nextState;
+      });
     }
   };
 
   // Navigation & View States
   const [activeTab, setActiveTab] = useState<'dashboard' | 'customers' | 'tickets' | 'followups' | 'settings' | 'users' | 'debug'>('dashboard');
+  const [settingsSubView, setSettingsSubView] = useState<'main' | 'archived'>('main');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [preselectedCustomerId, setPreselectedCustomerId] = useState<string>('');
   const [isAddingCustomerInline, setIsAddingCustomerInline] = useState(false);
@@ -564,6 +581,122 @@ export default function App() {
     });
   };
 
+  // Event handler: Archive customer API proxy
+  const handleArchiveCustomer = async (id: string) => {
+    return wrapSave(async () => {
+      const currentCus = customers.find(c => c.id === id);
+      const userName = effectiveUser?.fullName || 'Staff';
+      const res = await archiveCustomer(config, id, userName);
+      if (res.success) {
+        const isoNow = new Date().toISOString();
+        setCustomers(prev => prev.map(c => c.id === id ? {
+          ...c,
+          isArchived: true,
+          archivedAt: isoNow,
+          archivedBy: userName
+        } : c));
+
+        if (selectedCustomer?.id === id) {
+          setSelectedCustomer(prev => prev ? {
+            ...prev,
+            isArchived: true,
+            archivedAt: isoNow,
+            archivedBy: userName
+          } : null);
+        }
+
+        if (currentCus) {
+          logArchiveAuditEvent({
+            customerId: id,
+            customerName: currentCus.name,
+            action: 'ARCHIVE',
+            archivedBy: userName,
+            archiveDateTime: isoNow,
+            performedBy: userName,
+            details: `Customer profile ${currentCus.name} (${id}) archived`
+          });
+          logCustomerActivity(id, 'UPDATED', `Profile archived by ${userName}`, userName);
+        }
+      }
+      return res;
+    });
+  };
+
+  // Event handler: Restore customer API proxy
+  const handleRestoreCustomer = async (id: string) => {
+    return wrapSave(async () => {
+      const currentCus = customers.find(c => c.id === id);
+      const userName = effectiveUser?.fullName || 'Staff';
+      const res = await restoreCustomer(config, id, userName);
+      if (res.success) {
+        const isoNow = new Date().toISOString();
+        setCustomers(prev => prev.map(c => c.id === id ? {
+          ...c,
+          isArchived: false,
+          restoredAt: isoNow,
+          restoredBy: userName
+        } : c));
+
+        if (selectedCustomer?.id === id) {
+          setSelectedCustomer(prev => prev ? {
+            ...prev,
+            isArchived: false,
+            restoredAt: isoNow,
+            restoredBy: userName
+          } : null);
+        }
+
+        if (currentCus) {
+          logArchiveAuditEvent({
+            customerId: id,
+            customerName: currentCus.name,
+            action: 'RESTORE',
+            restoredBy: userName,
+            restoreDateTime: isoNow,
+            performedBy: userName,
+            details: `Customer profile ${currentCus.name} (${id}) restored to active directory`
+          });
+          logCustomerActivity(id, 'UPDATED', `Profile restored by ${userName}`, userName);
+        }
+      }
+      return res;
+    });
+  };
+
+  // Event handler: Permanently delete archived customer API proxy (Admin Only)
+  const handlePermanentDeleteCustomer = async (id: string) => {
+    if (effectiveUser?.role !== 'Admin') {
+      return { success: false, error: 'Only Administrators can permanently delete archived customers.' };
+    }
+    return wrapSave(async () => {
+      const currentCus = customers.find(c => c.id === id);
+      const userName = effectiveUser?.fullName || 'Admin';
+      const res = await permanentDeleteCustomer(config, id);
+      if (res.success) {
+        const isoNow = new Date().toISOString();
+        setCustomers(prev => prev.filter(c => c.id !== id));
+        setTickets(prev => prev.filter(t => t.customerId !== id));
+        setFollowUps(prev => prev.filter(f => f.customerId !== id));
+        if (selectedCustomer?.id === id) {
+          setSelectedCustomer(null);
+        }
+
+        if (currentCus) {
+          logArchiveAuditEvent({
+            customerId: id,
+            customerName: currentCus.name,
+            action: 'PERMANENT_DELETE',
+            permanentlyDeletedBy: userName,
+            permanentDeleteDateTime: isoNow,
+            performedBy: userName,
+            details: `Customer profile ${currentCus.name} (${id}) permanently deleted from system`
+          });
+        }
+      }
+      return res;
+    });
+  };
+
   // Event handler: Create ticket API proxy
   const handleCreateTicket = async (
     customerId: string,
@@ -694,6 +827,7 @@ export default function App() {
     setPreselectedCustomerId('');
     setIsAddingCustomerInline(false);
     setCategoryFilter('');
+    setSettingsSubView('main');
     setActiveTab(tab);
   };
 
@@ -960,6 +1094,10 @@ export default function App() {
               onAddFollowUp={handleStartFollowUpForCustomer}
               onUpdateCustomer={handleUpdateCustomer}
               onDeleteCustomer={handleDeleteCustomer}
+              onArchiveCustomer={handleArchiveCustomer}
+              onRestoreCustomer={handleRestoreCustomer}
+              onPermanentDeleteCustomer={handlePermanentDeleteCustomer}
+              currentUser={effectiveUser}
             />
           </div>
         ) : (
@@ -1002,7 +1140,7 @@ export default function App() {
                     <div className="flex items-center gap-2 mt-1">
                       <p className="text-xs text-[#5A5A40]/60">Manage customer profiles and lookup interaction history</p>
                       <span className="text-[10px] font-bold bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#8a8a70]/20 dark:text-[#ecece5] px-2 py-0.5 rounded-full">
-                        {customers.length} total
+                        {customers.filter(c => !c.isArchived).length} active
                       </span>
                     </div>
                   </div>
@@ -1029,6 +1167,7 @@ export default function App() {
                     <CustomerForm
                       onAddCustomer={handleAddCustomer}
                       existingCustomers={customers}
+                      onSelectCustomer={handleSelectCustomer}
                     />
                   </div>
                 ) : (
@@ -1045,6 +1184,10 @@ export default function App() {
                     genderFilter={genderFilter}
                     onGenderFilterChange={setGenderFilter}
                     onAddTicket={handleStartTicketForCustomer}
+                    onArchiveCustomer={handleArchiveCustomer}
+                    onRestoreCustomer={handleRestoreCustomer}
+                    onPermanentDeleteCustomer={handlePermanentDeleteCustomer}
+                    currentUser={effectiveUser}
                     isLoading={isLoading}
                     newlyUpdatedIds={newlyUpdatedIds}
                   />
@@ -1090,10 +1233,28 @@ export default function App() {
               </div>
             )}
 
-             {/* 5. Settings Configuration View */}
+             {/* 5. Settings Configuration View & Nested Archived Customers Repository */}
             {activeTab === 'settings' && (
               <div className="max-w-3xl mx-auto">
-                {isCacheLoading ? (
+                {settingsSubView === 'archived' ? (
+                  <React.Suspense fallback={
+                    <div className="p-12 text-center bg-white dark:bg-[#1a1a15] rounded-2xl border border-gray-200 dark:border-[#8a8a70]/20 space-y-3">
+                      <div className="w-8 h-8 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                      <p className="text-xs text-amber-800 dark:text-amber-300 font-bold uppercase">Loading Archived Repository...</p>
+                    </div>
+                  }>
+                    <ArchivedCustomersView
+                      customers={customers}
+                      tickets={tickets}
+                      followUps={followUps}
+                      currentUser={effectiveUser}
+                      onSelectCustomer={handleSelectCustomer}
+                      onRestoreCustomer={handleRestoreCustomer}
+                      onPermanentDeleteCustomer={handlePermanentDeleteCustomer}
+                      onBack={() => setSettingsSubView('main')}
+                    />
+                  </React.Suspense>
+                ) : isCacheLoading ? (
                   <SettingsSkeleton />
                 ) : (
                   <SettingsPanel
@@ -1103,6 +1264,13 @@ export default function App() {
                     isLoading={isLoading}
                     isDeveloperMode={isDeveloperMode}
                     onOpenDebug={(effectiveUser?.role === 'Admin' && isDeveloperMode) ? () => setActiveTab('debug') : undefined}
+                    currentUser={effectiveUser}
+                    archivedCount={customers.filter(c => c.isArchived).length}
+                    onOpenArchivedCustomers={() => setSettingsSubView('archived')}
+                    onOpenArchivedAuditLogs={() => setSettingsSubView('archived')}
+                    lastSyncTime={lastSyncTime}
+                    syncStatus={syncStatus}
+                    isOnline={isOnline}
                   />
                 )}
               </div>
@@ -1209,7 +1377,7 @@ export default function App() {
             </button>
           )}
 
-          {/* Tab 6: Settings */}
+          {/* Tab 5/6: Settings */}
           <button
             onClick={() => handleTabNavigation('settings')}
             id="tab-btn-settings"

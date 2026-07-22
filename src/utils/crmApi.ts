@@ -224,6 +224,32 @@ export async function deleteCustomer(
   return cacheManager.queueDeleteCustomer(config, id);
 }
 
+// Archive a customer - DELEGATED TO SYNC QUEUE + IN-MEMORY
+export async function archiveCustomer(
+  config: SyncConfig,
+  id: string,
+  userFullName: string = 'Staff'
+): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+  return cacheManager.queueArchiveCustomer(config, id, userFullName);
+}
+
+// Restore an archived customer - DELEGATED TO SYNC QUEUE + IN-MEMORY
+export async function restoreCustomer(
+  config: SyncConfig,
+  id: string,
+  userFullName: string = 'Staff'
+): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+  return cacheManager.queueRestoreCustomer(config, id, userFullName);
+}
+
+// Permanently delete an archived customer (Admin Only)
+export async function permanentDeleteCustomer(
+  config: SyncConfig,
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  return cacheManager.queuePermanentDeleteCustomer(config, id);
+}
+
 // Create a ticket - DELEGATED TO SYNC QUEUE + IN-MEMORY
 export async function createTicket(
   config: SyncConfig,

@@ -581,7 +581,12 @@ export async function queueUpdateCustomer(config: SyncConfig, id: string, update
     remarks: updatedCustomer.remarks || '',
     imoNumber: updatedCustomer.imoNumber || '',
     additionalNumbers: updatedCustomer.additionalNumbers || [],
-    createdAt: updatedCustomer.createdAt || new Date().toISOString()
+    createdAt: updatedCustomer.createdAt || new Date().toISOString(),
+    isArchived: updatedCustomer.isArchived || false,
+    archivedAt: updatedCustomer.archivedAt || '',
+    archivedBy: updatedCustomer.archivedBy || '',
+    restoredAt: updatedCustomer.restoredAt || '',
+    restoredBy: updatedCustomer.restoredBy || ''
   };
 
   // 3. Check if there's already a CREATE_CUSTOMER for this tempId in the queue
@@ -649,6 +654,67 @@ export async function queueDeleteCustomer(config: SyncConfig, id: string): Promi
   triggerAutoSync();
 
   return { success: true };
+}
+
+// ARCHIVE CUSTOMER
+export async function queueArchiveCustomer(config: SyncConfig, id: string, userFullName: string = 'Staff'): Promise<{ success: boolean; customer?: Customer }> {
+  const customer = memoryCustomers.find(c => c.id === id);
+  if (!customer) {
+    return { success: false };
+  }
+
+  const archiveTime = new Date().toISOString();
+  const updates: Partial<Customer> = {
+    isArchived: true,
+    archivedAt: archiveTime,
+    archivedBy: userFullName
+  };
+
+  // 1. Update In-Memory
+  memoryCustomers = memoryCustomers.map(c => c.id === id ? { ...c, ...updates } : c);
+
+  // 2. Persist to DB immediately
+  await saveCustomersToDb(memoryCustomers);
+  notifySubscribers();
+
+  // 3. Queue background update
+  await queueUpdateCustomer(config, id, updates);
+
+  const updated = memoryCustomers.find(c => c.id === id);
+  return { success: true, customer: updated };
+}
+
+// RESTORE CUSTOMER
+export async function queueRestoreCustomer(config: SyncConfig, id: string, userFullName: string = 'Staff'): Promise<{ success: boolean; customer?: Customer }> {
+  const customer = memoryCustomers.find(c => c.id === id);
+  if (!customer) {
+    return { success: false };
+  }
+
+  const restoreTime = new Date().toISOString();
+  const updates: Partial<Customer> = {
+    isArchived: false,
+    restoredAt: restoreTime,
+    restoredBy: userFullName
+  };
+
+  // 1. Update In-Memory
+  memoryCustomers = memoryCustomers.map(c => c.id === id ? { ...c, ...updates } : c);
+
+  // 2. Persist to DB immediately
+  await saveCustomersToDb(memoryCustomers);
+  notifySubscribers();
+
+  // 3. Queue background update
+  await queueUpdateCustomer(config, id, updates);
+
+  const updated = memoryCustomers.find(c => c.id === id);
+  return { success: true, customer: updated };
+}
+
+// PERMANENT DELETE CUSTOMER (ADMIN ONLY)
+export async function queuePermanentDeleteCustomer(config: SyncConfig, id: string): Promise<{ success: boolean }> {
+  return queueDeleteCustomer(config, id);
 }
 
 // CREATE TICKET

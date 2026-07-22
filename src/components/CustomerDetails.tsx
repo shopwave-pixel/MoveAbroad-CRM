@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Customer, AdditionalNumber, Ticket, TicketStatus, FollowUp } from '../types';
+import { Customer, AdditionalNumber, Ticket, TicketStatus, FollowUp, User as UserType } from '../types';
 import SmartContactActions from './SmartContactActions';
 import InlineCopy from './InlineCopy';
 import { getCustomerTimeline } from '../utils/activityLogger';
@@ -26,7 +26,11 @@ import {
   MessageSquare,
   AlignLeft,
   ExternalLink,
-  Copy
+  Copy,
+  Archive,
+  RotateCcw,
+  ShieldAlert,
+  AlertTriangle
 } from 'lucide-react';
 
 interface CustomerDetailsProps {
@@ -52,6 +56,10 @@ interface CustomerDetailsProps {
     additionalNumbers?: AdditionalNumber[]
   ) => Promise<{ success: boolean; error?: string }>;
   onDeleteCustomer: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onArchiveCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onRestoreCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  onPermanentDeleteCustomer?: (id: string) => Promise<{ success: boolean; error?: string }>;
+  currentUser?: UserType | null;
 }
 
 const POPULAR_COUNTRIES = [
@@ -86,10 +94,19 @@ const CustomerDetails = React.memo(function CustomerDetails({
   onAddTicket,
   onAddFollowUp,
   onUpdateCustomer,
-  onDeleteCustomer
+  onDeleteCustomer,
+  onArchiveCustomer,
+  onRestoreCustomer,
+  onPermanentDeleteCustomer,
+  currentUser
 }: CustomerDetailsProps) {
   // Filters
   const [statusFilter, setStatusFilter] = useState<'All' | TicketStatus>('All');
+
+  // Archive / Restore / Permanent Delete Modals
+  const [isConfirmArchiving, setIsConfirmArchiving] = useState(false);
+  const [isConfirmRestoring, setIsConfirmRestoring] = useState(false);
+  const [isConfirmPermanentDeleting, setIsConfirmPermanentDeleting] = useState(false);
 
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
@@ -563,8 +580,65 @@ const CustomerDetails = React.memo(function CustomerDetails({
 
   // Delete is strictly disabled under Permanent Records policy
 
+  // Archive / Restore / Permanent Delete Handlers
+  const handleArchive = async () => {
+    if (!onArchiveCustomer) return;
+    setAlert({ type: 'loading', message: 'Archiving customer profile...' });
+    const res = await onArchiveCustomer(customer.id);
+    setIsConfirmArchiving(false);
+    if (res.success) {
+      setAlert({ type: 'success', message: 'Customer profile moved to Archive.' });
+      setTimeout(() => setAlert({ type: 'idle', message: '' }), 3000);
+    } else {
+      setAlert({ type: 'error', message: res.error || 'Failed to archive customer profile.' });
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!onRestoreCustomer) return;
+    setAlert({ type: 'loading', message: 'Restoring customer profile...' });
+    const res = await onRestoreCustomer(customer.id);
+    setIsConfirmRestoring(false);
+    if (res.success) {
+      setAlert({ type: 'success', message: 'Customer profile restored to active directory.' });
+      setTimeout(() => setAlert({ type: 'idle', message: '' }), 3000);
+    } else {
+      setAlert({ type: 'error', message: res.error || 'Failed to restore customer profile.' });
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!onPermanentDeleteCustomer) return;
+    setAlert({ type: 'loading', message: 'Permanently deleting customer record...' });
+    const res = await onPermanentDeleteCustomer(customer.id);
+    setIsConfirmPermanentDeleting(false);
+    if (res.success) {
+      setAlert({ type: 'success', message: 'Customer record permanently deleted.' });
+      setTimeout(() => {
+        onBack();
+      }, 1000);
+    } else {
+      setAlert({ type: 'error', message: res.error || 'Failed to permanently delete customer.' });
+    }
+  };
+
   return (
     <div className="space-y-6" id="customer-details-view">
+      
+      {/* Archive Status Banner */}
+      {customer.isArchived && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <Archive className="w-5 h-5 text-amber-600" />
+            <span>THIS CUSTOMER PROFILE IS ARCHIVED (Hidden from active directory)</span>
+          </div>
+          {customer.archivedAt && (
+            <span className="font-mono text-[11px] text-amber-800 dark:text-amber-300">
+              Archived: {new Date(customer.archivedAt).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      )}
       
       {/* Header action panel */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="details-header-panel">
@@ -966,16 +1040,54 @@ const CustomerDetails = React.memo(function CustomerDetails({
                 </div>
               </div>
               
-              <div className="flex items-center gap-2 justify-center md:justify-end">
-                <button
-                  onClick={() => setIsEditing(true)}
-                  id="btn-edit-customer"
-                  className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-[#10B981] hover:bg-[#059669] text-white font-bold text-[13px] rounded-full shadow-md shadow-[#10B981]/15 transition-all cursor-pointer active:scale-95"
-                  title="Edit Customer Info"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  <span>EDIT PROFILE</span>
-                </button>
+              <div className="flex flex-wrap items-center gap-2 justify-center md:justify-end">
+                {!customer.isArchived ? (
+                  <>
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      id="btn-edit-customer"
+                      className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-[#10B981] hover:bg-[#059669] text-white font-bold text-[13px] rounded-full shadow-md shadow-[#10B981]/15 transition-all cursor-pointer active:scale-95"
+                      title="Edit Customer Info"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>EDIT PROFILE</span>
+                    </button>
+
+                    <button
+                      onClick={() => setIsConfirmArchiving(true)}
+                      id="btn-archive-customer"
+                      className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[13px] rounded-full shadow-md shadow-amber-600/15 transition-all cursor-pointer active:scale-95"
+                      title="Archive Customer Profile"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                      <span>ARCHIVE CUSTOMER</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setIsConfirmRestoring(true)}
+                      id="btn-restore-customer"
+                      className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] rounded-full shadow-md shadow-emerald-600/15 transition-all cursor-pointer active:scale-95"
+                      title="Restore to Active Directory"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>RESTORE CUSTOMER</span>
+                    </button>
+
+                    {currentUser?.role === 'Admin' && (
+                      <button
+                        onClick={() => setIsConfirmPermanentDeleting(true)}
+                        id="btn-permanent-delete-customer"
+                        className="inline-flex items-center justify-center gap-2 px-5 h-10 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[13px] rounded-full shadow-md shadow-rose-600/15 transition-all cursor-pointer active:scale-95"
+                        title="Admin Only: Permanently Delete Record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>PERMANENTLY DELETE</span>
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -1368,6 +1480,120 @@ const CustomerDetails = React.memo(function CustomerDetails({
           </div>
         )}
       </div>
+
+      {/* Archive Confirmation Modal */}
+      {isConfirmArchiving && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c16] rounded-2xl border border-amber-500/30 max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
+              <Archive className="w-6 h-6 shrink-0" />
+              <h2 className="text-base font-bold uppercase tracking-wide">Archive Customer Profile?</h2>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-300 font-medium leading-relaxed">
+              This customer profile will be removed from the active customer directory. It can be viewed or restored at any time from the <strong className="text-amber-700 dark:text-amber-300 uppercase">Archived Customers</strong> section.
+            </p>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-100 dark:border-amber-900/30 text-xs font-mono text-amber-800 dark:text-amber-300 space-y-1">
+              <div>Name: {customer.name}</div>
+              <div>Customer ID: {customer.id}</div>
+              <div>Mobile: {customer.mobileNumber}</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-[#8a8a70]/20">
+              <button
+                onClick={() => setIsConfirmArchiving(false)}
+                className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleArchive}
+                className="px-5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-all cursor-pointer shadow-md active:scale-95"
+              >
+                Confirm Archive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restore Confirmation Modal */}
+      {isConfirmRestoring && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c16] rounded-2xl border border-emerald-500/30 max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
+              <RotateCcw className="w-6 h-6 shrink-0" />
+              <h2 className="text-base font-bold uppercase tracking-wide">Restore Customer Profile?</h2>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-300 font-medium leading-relaxed">
+              This will restore <strong className="text-gray-900 dark:text-white uppercase">{customer.name}</strong> ({customer.id}) back to the active Customer Directory.
+            </p>
+
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/30 text-xs font-mono text-emerald-800 dark:text-emerald-300 space-y-1">
+              <div>Customer ID: {customer.id}</div>
+              <div>Mobile: {customer.mobileNumber}</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-[#8a8a70]/20">
+              <button
+                onClick={() => setIsConfirmRestoring(false)}
+                className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRestore}
+                className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-full transition-all cursor-pointer shadow-md active:scale-95"
+              >
+                Confirm Restore
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Delete Modal (Admin Only) */}
+      {isConfirmPermanentDeleting && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c16] rounded-2xl border border-rose-500/40 max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h2 className="text-base font-bold uppercase tracking-wide">Permanently Delete Customer?</h2>
+            </div>
+
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-800 dark:text-rose-300 font-bold uppercase tracking-wider">
+              ⚠️ WARNING: THIS ACTION IS PERMANENT AND CANNOT BE UNDONE.
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-300 font-medium leading-relaxed">
+              You are about to permanently remove <strong className="text-gray-900 dark:text-white uppercase">{customer.name}</strong> ({customer.id}) from local database and Google Sheets.
+            </p>
+
+            <div className="p-3 bg-gray-50 dark:bg-zinc-900 rounded-xl border text-xs font-mono space-y-1 text-gray-700 dark:text-gray-300">
+              <div>Customer ID: {customer.id}</div>
+              <div>Name: {customer.name}</div>
+              <div>Mobile: {customer.mobileNumber}</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-[#8a8a70]/20">
+              <button
+                onClick={() => setIsConfirmPermanentDeleting(false)}
+                className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePermanentDelete}
+                className="px-5 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-full transition-all cursor-pointer shadow-md active:scale-95"
+              >
+                Permanently Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

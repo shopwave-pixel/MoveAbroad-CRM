@@ -86,18 +86,23 @@ const Dashboard = React.memo(function Dashboard({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Active non-archived customers
+  const activeCustomers = useMemo(() => {
+    return customers.filter(c => !c.isArchived);
+  }, [customers]);
+
   const filteredCustomersSearch = useMemo(() => {
     if (!debouncedValue.trim()) return [];
     const lower = debouncedValue.toLowerCase();
-    return customers.filter(c => 
+    return activeCustomers.filter(c => 
       c.name.toLowerCase().includes(lower) ||
       c.mobileNumber.toLowerCase().includes(lower) ||
       c.id.toLowerCase().includes(lower)
     );
-  }, [debouncedValue, customers]);
+  }, [debouncedValue, activeCustomers]);
 
   // Statistics Calculations
-  const totalCustomersCount = customers.length;
+  const totalCustomersCount = activeCustomers.length;
   const openTicketsCount = tickets.filter(t => t.status === 'Open').length;
   const closedTicketsCount = tickets.filter(t => t.status === 'Closed').length;
   const pendingFollowUpsCount = followUps.filter(f => f.status === 'Pending').length;
@@ -122,7 +127,7 @@ const Dashboard = React.memo(function Dashboard({
       'DELICATOR': 0
     };
 
-    customers.forEach(c => {
+    activeCustomers.forEach(c => {
       if (c.customerCategory) {
         const catUpper = c.customerCategory.toUpperCase();
         if (catUpper in counts && activeCustomerIds.has(c.id)) {
@@ -132,7 +137,7 @@ const Dashboard = React.memo(function Dashboard({
     });
 
     return counts;
-  }, [customers, tickets]);
+  }, [activeCustomers, tickets]);
 
   // Let's sort activities and events for the Vertical Timeline
   const timelineEvents = useMemo(() => {

@@ -18,6 +18,13 @@ export interface Customer {
   address?: string;
   gender?: string;
   additionalNumbers?: AdditionalNumber[];
+  isArchived?: boolean;
+  archivedAt?: string;
+  archivedBy?: string;
+  restoredAt?: string;
+  restoredBy?: string;
+  permanentlyDeletedAt?: string;
+  permanentlyDeletedBy?: string;
 }
 
 export type TicketStatus = 'Open' | 'Closed';
