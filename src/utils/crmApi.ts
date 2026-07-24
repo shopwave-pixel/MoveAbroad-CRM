@@ -1,4 +1,4 @@
-import { Customer, AdditionalNumber, Ticket, FollowUp, CRMData, SyncConfig, User } from '../types';
+import { Customer, AdditionalNumber, Ticket, FollowUp, CRMData, SyncConfig, User, TicketComment, TicketActivity } from '../types';
 import * as cacheManager from './cacheManager';
 import { clearCacheOnLogout } from './cacheManager';
 
@@ -810,4 +810,97 @@ export async function runSystemTests(
 
 export function triggerSaveStatus(status: 'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED') {
   window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status } }));
+}
+
+// ==========================================
+// ENTERPRISE TICKET MODULE & REMINDER APIS
+// ==========================================
+
+async function postToGas(webAppUrl: string, action: string, data: any): Promise<any> {
+  try {
+    const response = await fetch(webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, ...data })
+    });
+    if (!response.ok) throw new Error(`HTTP Status ${response.status}`);
+    return await response.json();
+  } catch (e: any) {
+    return { success: false, error: e.message || e.toString() };
+  }
+}
+
+export async function createComment(config: SyncConfig, payload: {
+  ticketId: string;
+  customerId: string;
+  parentTicketId?: string;
+  comment: string;
+  isInternalNote?: boolean;
+  commentedBy: string;
+}): Promise<{ success: boolean; comment?: TicketComment; error?: string }> {
+  if (!config.webAppUrl) {
+    const comment: TicketComment = {
+      id: "CMT-" + Date.now(),
+      ticketId: payload.ticketId,
+      customerId: payload.customerId,
+      parentTicketId: payload.parentTicketId || payload.ticketId,
+      comment: payload.comment,
+      isInternalNote: !!payload.isInternalNote,
+      commentedBy: payload.commentedBy,
+      createdAt: new Date().toISOString(),
+      status: "Active"
+    };
+    try {
+      const localComments: TicketComment[] = JSON.parse(localStorage.getItem('move_abroad_crm_comments') || '[]');
+      localComments.push(comment);
+      localStorage.setItem('move_abroad_crm_comments', JSON.stringify(localComments));
+    } catch (e) {
+      console.error('Failed to save comment locally', e);
+    }
+    return { success: true, comment };
+  }
+  return postToGas(config.webAppUrl, 'create_comment', payload);
+}
+
+export async function updateComment(config: SyncConfig, payload: {
+  commentId: string;
+  comment: string;
+  isInternalNote?: boolean;
+  updatedBy: string;
+}): Promise<{ success: boolean; error?: string }> {
+  if (!config.webAppUrl) return { success: true };
+  return postToGas(config.webAppUrl, 'update_comment', payload);
+}
+
+export async function deleteComment(config: SyncConfig, commentId: string, deletedBy: string): Promise<{ success: boolean; error?: string }> {
+  if (!config.webAppUrl) return { success: true };
+  return postToGas(config.webAppUrl, 'delete_comment', { commentId, deletedBy });
+}
+
+export async function getComments(config: SyncConfig, ticketId: string): Promise<{ success: boolean; comments?: TicketComment[]; error?: string }> {
+  if (!config.webAppUrl) {
+    try {
+      const localComments: TicketComment[] = JSON.parse(localStorage.getItem('move_abroad_crm_comments') || '[]');
+      const filtered = localComments.filter(c => c.ticketId === ticketId || c.parentTicketId === ticketId);
+      return { success: true, comments: filtered };
+    } catch (e) {
+      return { success: true, comments: [] };
+    }
+  }
+  try {
+    const res = await fetch(`${config.webAppUrl}?action=get_comments&ticketId=${encodeURIComponent(ticketId)}`);
+    return await res.json();
+  } catch (e: any) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+export async function getTicketActivities(config: SyncConfig, ticketId: string): Promise<{ success: boolean; activities?: TicketActivity[]; error?: string }> {
+  if (!config.webAppUrl) return { success: true, activities: [] };
+  try {
+    const res = await fetch(`${config.webAppUrl}?action=get_ticket_activities&ticketId=${encodeURIComponent(ticketId)}`);
+    return await res.json();
+  } catch (e: any) {
+    return { success: false, error: e.toString() };
+  }
 }

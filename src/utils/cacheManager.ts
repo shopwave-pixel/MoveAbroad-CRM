@@ -223,7 +223,7 @@ function notifyConflicts() {
 // --- CORE CACHE MANAGER INTERFACE ---
 
 // Helper fetch with timeout and automatic retry with exponential backoff
-async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 2, timeoutMs = 6000): Promise<Response> {
+async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 2, timeoutMs = 15000): Promise<Response> {
   let attempt = 0;
   let lastError: any;
 
@@ -241,7 +241,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
         return response;
       }
       if (attempt < maxRetries) {
-        await new Promise(res => setTimeout(res, 300 * Math.pow(2, attempt)));
+        await new Promise(res => setTimeout(res, 500 * Math.pow(2, attempt)));
       } else {
         return response;
       }
@@ -249,7 +249,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries
       clearTimeout(timer);
       lastError = err;
       if (attempt < maxRetries) {
-        await new Promise(res => setTimeout(res, 300 * Math.pow(2, attempt)));
+        await new Promise(res => setTimeout(res, 500 * Math.pow(2, attempt)));
       }
     }
     attempt++;
@@ -316,7 +316,7 @@ async function executeSmartSync(config: SyncConfig): Promise<{
       method: 'GET',
       mode: 'cors',
       headers: { 'Accept': 'application/json' }
-    }, 2, 6000);
+    }, 2, 15000);
 
     if (!response.ok) {
       throw new Error(`HTTP Error ${response.status}`);

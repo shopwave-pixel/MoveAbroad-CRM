@@ -1230,6 +1230,8 @@ export default function App() {
                     onUpdateTicket={handleUpdateTicket}
                     onDeleteTicket={handleDeleteTicket}
                     preselectedCustomerId={preselectedCustomerId}
+                    config={config}
+                    currentUser={effectiveUser}
                   />
                 )}
               </div>

@@ -86,6 +86,18 @@ function doGet(e) {
         followUps: followUps
       });
     }
+
+    if (action === 'get_comments') {
+      const ticketId = e ? (e.parameter.ticketId || '') : '';
+      const comments = getTicketComments(sheets.ticketCommentsSheet, ticketId);
+      return jsonResponse({ success: true, comments: comments });
+    }
+
+    if (action === 'get_ticket_activities') {
+      const ticketId = e ? (e.parameter.ticketId || '') : '';
+      const activities = getTicketActivities(sheets.ticketActivitiesSheet, ticketId);
+      return jsonResponse({ success: true, activities: activities });
+    }
     
     if (action === 'get_users') {
       const users = getUsers(sheets.usersSheet);
@@ -904,6 +916,102 @@ function doPost(e) {
         return jsonResponse({ success: false, error: "Follow-up not found." });
       }
     }
+
+    if (action === 'create_comment') {
+      const ticketId = (payload.ticketId || '').trim();
+      const customerId = (payload.customerId || '').trim();
+      const parentTicketId = (payload.parentTicketId || '').trim();
+      const commentText = (payload.comment || '').trim();
+      const isInternalNote = payload.isInternalNote === true || String(payload.isInternalNote).toLowerCase() === 'true';
+      const commentedBy = (payload.commentedBy || 'User').trim();
+
+      if (!ticketId || !commentText) {
+        return jsonResponse({ success: false, error: "Ticket ID and comment text are required." });
+      }
+
+      const commentId = "CMT-" + Date.now();
+      const createdAt = new Date().toISOString();
+
+      appendRowByHeader(sheets.ticketCommentsSheet, {
+        "Comment ID": commentId,
+        "Ticket ID": ticketId,
+        "Customer ID": customerId,
+        "Parent Ticket ID": parentTicketId,
+        "Comment": commentText,
+        "Internal Note": isInternalNote ? "Yes" : "No",
+        "Commented By": commentedBy,
+        "Created At": createdAt,
+        "Updated At": createdAt,
+        "Status": "Active"
+      });
+
+      logTicketActivity(sheets.ticketActivitiesSheet, ticketId, isInternalNote ? "Internal Note Added" : "Comment Added", commentedBy, commentText);
+
+      const newComment = {
+        id: commentId,
+        ticketId: ticketId,
+        customerId: customerId,
+        parentTicketId: parentTicketId,
+        comment: commentText,
+        isInternalNote: isInternalNote,
+        commentedBy: commentedBy,
+        createdAt: createdAt,
+        status: "Active"
+      };
+
+      return jsonResponse({ success: true, comment: newComment });
+    }
+
+    if (action === 'update_comment') {
+      const commentId = (payload.commentId || payload.id || '').trim();
+      const commentText = (payload.comment || '').trim();
+      const isInternalNote = payload.isInternalNote === true || String(payload.isInternalNote).toLowerCase() === 'true';
+      const updatedBy = (payload.updatedBy || 'User').trim();
+
+      if (!commentId || !commentText) {
+        return jsonResponse({ success: false, error: "Comment ID and updated text are required." });
+      }
+
+      const updatedAt = new Date().toISOString();
+      const updated = updateRowById(sheets.ticketCommentsSheet, commentId, "Comment ID", {
+        "Comment": commentText,
+        "Internal Note": isInternalNote ? "Yes" : "No",
+        "Updated At": updatedAt
+      });
+
+      if (updated) {
+        const comments = getTicketComments(sheets.ticketCommentsSheet, '');
+        const c = comments.find(function(item) { return item.id === commentId; });
+        if (c) {
+          logTicketActivity(sheets.ticketActivitiesSheet, c.ticketId, "Comment Edited", updatedBy, commentText);
+        }
+        return jsonResponse({ success: true, message: "Comment updated successfully." });
+      } else {
+        return jsonResponse({ success: false, error: "Comment not found." });
+      }
+    }
+
+    if (action === 'delete_comment') {
+      const commentId = (payload.commentId || payload.id || '').trim();
+      const deletedBy = (payload.deletedBy || 'User').trim();
+
+      if (!commentId) {
+        return jsonResponse({ success: false, error: "Comment ID is required." });
+      }
+
+      const comments = getTicketComments(sheets.ticketCommentsSheet, '');
+      const c = comments.find(function(item) { return item.id === commentId; });
+
+      const deleted = deleteRowById(sheets.ticketCommentsSheet, commentId, "Comment ID");
+      if (deleted) {
+        if (c) {
+          logTicketActivity(sheets.ticketActivitiesSheet, c.ticketId, "Comment Deleted", deletedBy, "Comment ID: " + commentId);
+        }
+        return jsonResponse({ success: true, message: "Comment deleted successfully." });
+      } else {
+        return jsonResponse({ success: false, error: "Comment not found." });
+      }
+    }
     
     return jsonResponse({
       success: false,
@@ -944,6 +1052,14 @@ function setupSheets() {
     {
       name: "FollowUps",
       headers: ["Follow-up ID", "Customer ID", "Customer Name", "Mobile Number", "Follow-up Date", "Follow-up Time", "Notes", "Status", "Created At"]
+    },
+    {
+      name: "Ticket Comments",
+      headers: ["Comment ID", "Ticket ID", "Customer ID", "Parent Ticket ID", "Comment", "Internal Note", "Commented By", "Created At", "Updated At", "Status"]
+    },
+    {
+      name: "Ticket Activities",
+      headers: ["Activity ID", "Ticket ID", "Action", "Performed By", "Timestamp", "Details"]
     },
     {
       name: "Archived Customers",
@@ -1059,12 +1175,18 @@ function setupSheets() {
       sheet.appendRow(def.headers);
       sheet.getRange(1, 1, 1, def.headers.length).setFontWeight("bold");
       sheetMap[def.name] = sheet;
+    } else {
+      ensureSheetHeaders(sheet, def.headers);
     }
 
     if (def.name === "Users") resultSheets.usersSheet = sheet;
     else if (def.name === "Customers") resultSheets.customersSheet = sheet;
     else if (def.name === "Tickets") resultSheets.ticketsSheet = sheet;
     else if (def.name === "FollowUps") resultSheets.followUpsSheet = sheet;
+    else if (def.name === "Ticket Comments") resultSheets.ticketCommentsSheet = sheet;
+    else if (def.name === "Sub Tickets") resultSheets.subTicketsSheet = sheet;
+    else if (def.name === "Ticket Activities") resultSheets.ticketActivitiesSheet = sheet;
+    else if (def.name === "Email Logs") resultSheets.emailLogsSheet = sheet;
     else if (def.name === "Archived Customers") resultSheets.archivedCustomersSheet = sheet;
     else if (def.name === "Duplicate Groups") resultSheets.duplicateGroupsSheet = sheet;
     else if (def.name === "Duplicate Audit Log") resultSheets.duplicateAuditLogSheet = sheet;
@@ -1082,6 +1204,8 @@ function setupSheets() {
     else if (def.name === "Backup History") resultSheets.backupHistorySheet = sheet;
     else if (def.name === "API Keys") resultSheets.apiKeysSheet = sheet;
   }
+
+  ensureReminderTrigger();
 
   return resultSheets;
 }
@@ -1463,6 +1587,87 @@ function hashPassword(password) {
     return val.toString(16).padStart(8, '0');
   }).join('');
   return hex;
+}
+
+// Fetch ticket comments from sheet
+function getTicketComments(sheet, ticketId) {
+  if (!sheet) return [];
+  const data = getSheetDataCached(sheet);
+  if (data.length <= 1) return [];
+  
+  const headers = data[0].map(function(h) { return String(h).trim(); });
+  const rows = data.slice(1);
+  const results = [];
+  
+  rows.forEach(function(row) {
+    const getVal = function(colName, defaultVal) {
+      if (defaultVal === undefined) defaultVal = '';
+      const idx = headers.indexOf(colName);
+      return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
+    };
+    const tId = getVal("Ticket ID");
+    if (!ticketId || tId === ticketId) {
+      const isNoteVal = getVal("Internal Note").toLowerCase();
+      results.push({
+        id: getVal("Comment ID"),
+        ticketId: tId,
+        customerId: getVal("Customer ID"),
+        parentTicketId: getVal("Parent Ticket ID"),
+        comment: getVal("Comment"),
+        isInternalNote: isNoteVal === 'true' || isNoteVal === 'yes',
+        commentedBy: getVal("Commented By"),
+        createdAt: getVal("Created At"),
+        updatedAt: getVal("Updated At"),
+        status: getVal("Status", "Active")
+      });
+    }
+  });
+  return results;
+}
+
+// Fetch ticket activities from sheet
+function getTicketActivities(sheet, ticketId) {
+  if (!sheet) return [];
+  const data = getSheetDataCached(sheet);
+  if (data.length <= 1) return [];
+
+  const headers = data[0].map(function(h) { return String(h).trim(); });
+  const rows = data.slice(1);
+  const results = [];
+
+  rows.forEach(function(row) {
+    const getVal = function(colName, defaultVal) {
+      if (defaultVal === undefined) defaultVal = '';
+      const idx = headers.indexOf(colName);
+      return idx !== -1 && idx < row.length ? String(row[idx]) : defaultVal;
+    };
+    const tId = getVal("Ticket ID");
+    if (!ticketId || tId === ticketId) {
+      results.push({
+        id: getVal("Activity ID"),
+        ticketId: tId,
+        action: getVal("Action"),
+        performedBy: getVal("Performed By"),
+        timestamp: getVal("Timestamp"),
+        details: getVal("Details")
+      });
+    }
+  });
+  return results;
+}
+
+// Log ticket activity helper
+function logTicketActivity(sheet, ticketId, action, performedBy, details) {
+  if (!sheet || !ticketId) return;
+  const actId = "ACT-" + Date.now();
+  appendRowByHeader(sheet, {
+    "Activity ID": actId,
+    "Ticket ID": ticketId,
+    "Action": action,
+    "Performed By": performedBy || "System",
+    "Timestamp": new Date().toISOString(),
+    "Details": details || ""
+  });
 }
 `;
 

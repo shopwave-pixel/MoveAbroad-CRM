@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Customer, Ticket, TicketStatus, FollowUp } from '../types';
+import { Customer, Ticket, TicketStatus, FollowUp, TicketComment, TicketActivity, SyncConfig, User as CRMUser } from '../types';
 import SuccessCheckmark from './SuccessCheckmark';
 import SmartGlobalSearch from './SmartGlobalSearch';
 import SmartContactActions from './SmartContactActions';
@@ -33,8 +33,20 @@ import {
   Plus, 
   AlertTriangle,
   History,
-  Info
+  Info,
+  MessageSquare,
+  Lock,
+  Send,
+  ChevronDown,
+  ChevronUp,
+  ShieldAlert
 } from 'lucide-react';
+import {
+  createComment,
+  getComments,
+  deleteComment,
+  getTicketActivities
+} from '../utils/crmApi';
 
 interface TicketsManagerProps {
   customers: Customer[];
@@ -59,6 +71,8 @@ interface TicketsManagerProps {
   onUpdateTicket: (id: string, updates: Partial<Ticket>) => Promise<{ success: boolean; message?: string; error?: string }>;
   onDeleteTicket: (id: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   preselectedCustomerId?: string;
+  config?: SyncConfig;
+  currentUser?: CRMUser | null;
 }
 
 const TicketsManager = React.memo(function TicketsManager({
@@ -69,7 +83,9 @@ const TicketsManager = React.memo(function TicketsManager({
   onCreateTicket,
   onUpdateTicket,
   onDeleteTicket,
-  preselectedCustomerId
+  preselectedCustomerId,
+  config,
+  currentUser
 }: TicketsManagerProps) {
   // Mode toggles
   const [subView, setSubView] = useState<'list' | 'create'>('list');
@@ -81,6 +97,73 @@ const TicketsManager = React.memo(function TicketsManager({
   const [newCustomerMobile, setNewCustomerMobile] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<TicketStatus>('Open');
+
+  // Ticket Details State
+  const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
+  const [commentsMap, setCommentsMap] = useState<Record<string, TicketComment[]>>({});
+  const [activitiesMap, setActivitiesMap] = useState<Record<string, TicketActivity[]>>({});
+  
+  // New Comment Form State
+  const [newCommentText, setNewCommentText] = useState('');
+  const [isInternalNote, setIsInternalNote] = useState(false);
+  const [isAddingComment, setIsAddingComment] = useState(false);
+
+  const loadTicketDetails = async (ticketId: string) => {
+    if (!config) return;
+    try {
+      const [cRes, aRes] = await Promise.all([
+        getComments(config, ticketId),
+        getTicketActivities(config, ticketId)
+      ]);
+      if (cRes.success && cRes.comments) {
+        setCommentsMap(prev => ({ ...prev, [ticketId]: cRes.comments! }));
+      }
+      if (aRes.success && aRes.activities) {
+        setActivitiesMap(prev => ({ ...prev, [ticketId]: aRes.activities! }));
+      }
+    } catch (e) {
+      console.error("Failed to load ticket details", e);
+    }
+  };
+
+  const handleToggleExpandTicket = (ticketId: string) => {
+    if (expandedTicketId === ticketId) {
+      setExpandedTicketId(null);
+    } else {
+      setExpandedTicketId(ticketId);
+      loadTicketDetails(ticketId);
+    }
+  };
+
+  const handlePostComment = async (ticket: Ticket) => {
+    if (!newCommentText.trim() || !config) return;
+    setIsAddingComment(true);
+    try {
+      const res = await createComment(config, {
+        ticketId: ticket.id,
+        customerId: ticket.customerId,
+        comment: newCommentText.trim(),
+        isInternalNote: isInternalNote,
+        commentedBy: currentUser?.fullName || 'Staff'
+      });
+      if (res.success && res.comment) {
+        setCommentsMap(prev => ({
+          ...prev,
+          [ticket.id]: [...(prev[ticket.id] || []), res.comment!]
+        }));
+        setNewCommentText('');
+        setIsInternalNote(false);
+        const aRes = await getTicketActivities(config, ticket.id);
+        if (aRes.success && aRes.activities) {
+          setActivitiesMap(prev => ({ ...prev, [ticket.id]: aRes.activities! }));
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsAddingComment(false);
+    }
+  };
 
   // Customer Search query state (specifically for creating tickets)
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -134,58 +217,74 @@ const TicketsManager = React.memo(function TicketsManager({
     setVisibleCount(20);
   }, [searchQuery, statusFilter, ticketSearchInput]);
 
-  // Edit / Action States
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDescription, setEditDescription] = useState('');
-  const [editStatus, setEditStatus] = useState<TicketStatus>('Closed');
-  const [ticketSaveStatus, setTicketSaveStatus] = useState<'IDLE' | 'EDITING' | 'SAVING' | 'SAVED' | 'FAILED'>('IDLE');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Edit Ticket Modal State
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+  const [editStatus, setEditStatus] = useState<TicketStatus>('Open');
+  const [editComments, setEditComments] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editSuccessMsg, setEditSuccessMsg] = useState('');
+  const [editErrorMsg, setEditErrorMsg] = useState('');
 
-  // Debounced auto-save for Ticket editing
-  useEffect(() => {
-    if (!editingId) return;
-    
-    const activeTicket = tickets.find(t => t.id === editingId);
-    if (!activeTicket) return;
+  const handleOpenEditModal = (t: Ticket) => {
+    setEditingTicket(t);
+    setEditStatus(t.status);
+    setEditComments(''); // Always empty per workflow requirement
+    setEditSuccessMsg('');
+    setEditErrorMsg('');
+  };
 
-    // Check if anything actually changed from current ticket state
-    const isDescriptionChanged = editDescription !== activeTicket.conversationDescription;
-    const isStatusChanged = editStatus !== activeTicket.status;
-    if (!isDescriptionChanged && !isStatusChanged) {
-      setTicketSaveStatus('IDLE');
+  const handleSaveEditTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTicket) return;
+    if (!editComments.trim()) {
+      setEditErrorMsg('Comments are required.');
       return;
     }
 
-    setTicketSaveStatus('EDITING');
-    window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'EDITING' } }));
+    setIsSavingEdit(true);
+    setEditErrorMsg('');
+    setEditSuccessMsg('');
 
-    const timer = setTimeout(async () => {
-      setTicketSaveStatus('SAVING');
-      window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVING' } }));
-      try {
-        const res = await onUpdateTicket(editingId, {
-          conversationDescription: editDescription.trim(),
-          status: editStatus
-        });
-        if (res.success) {
-          setTicketSaveStatus('SAVED');
-          window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'SAVED' } }));
-          setTimeout(() => {
-            setTicketSaveStatus('IDLE');
-            window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'IDLE' } }));
-          }, 1500);
-        } else {
-          setTicketSaveStatus('FAILED');
-          window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'FAILED' } }));
-        }
-      } catch (err) {
-        setTicketSaveStatus('FAILED');
-        window.dispatchEvent(new CustomEvent('set-save-status', { detail: { status: 'FAILED' } }));
+    try {
+      const cfg = config || { webAppUrl: '', isLiveMode: false };
+      const updaterName = currentUser?.fullName || 'Staff';
+
+      // 1. Create a new Ticket History entry
+      const cRes = await createComment(cfg, {
+        ticketId: editingTicket.id,
+        customerId: editingTicket.customerId,
+        parentTicketId: editingTicket.id,
+        comment: editComments.trim(),
+        commentedBy: updaterName
+      });
+
+      if (cRes.success && cRes.comment) {
+        setCommentsMap(prev => ({
+          ...prev,
+          [editingTicket.id]: [cRes.comment!, ...(prev[editingTicket.id] || [])]
+        }));
       }
-    }, 800);
 
-    return () => clearTimeout(timer);
-  }, [editDescription, editStatus, editingId, onUpdateTicket]);
+      // 2. Update Parent Ticket Status if changed
+      const uRes = await onUpdateTicket(editingTicket.id, {
+        status: editStatus
+      });
+
+      if (uRes.success || cRes.success) {
+        setEditSuccessMsg('✅ Ticket Updated Successfully');
+        setTimeout(() => {
+          setEditingTicket(null);
+          setEditSuccessMsg('');
+        }, 1200);
+      } else {
+        setEditErrorMsg(uRes.error || cRes.error || 'Failed to update ticket.');
+      }
+    } catch (err: any) {
+      setEditErrorMsg(err.message || 'An error occurred while updating the ticket.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Status indicator
   const [alert, setAlert] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({
@@ -271,34 +370,6 @@ const TicketsManager = React.memo(function TicketsManager({
     }
   };
 
-  // Handle Updates
-  const handleSaveEdit = async (id: string) => {
-    if (!editDescription.trim()) return;
-    
-    const ticket = tickets.find(t => t.id === id);
-    if (ticket && ticket.status === 'Closed') {
-      setAlert({ type: 'error', message: 'This ticket is closed and locked (Read Only).' });
-      return;
-    }
-
-    setAlert({ type: 'loading', message: 'Updating ticket records...' });
-    try {
-      const res = await onUpdateTicket(id, { 
-        conversationDescription: editDescription.trim(), 
-        status: editStatus 
-      });
-      if (res.success) {
-        setAlert({ type: 'success', message: 'Ticket updated successfully!' });
-        setEditingId(null);
-        setTimeout(() => setAlert({ type: 'idle', message: '' }), 3000);
-      } else {
-        setAlert({ type: 'error', message: res.error || 'Failed to update ticket.' });
-      }
-    } catch (err: any) {
-      setAlert({ type: 'error', message: err.message || 'An unexpected error occurred.' });
-    }
-  };
-
   // Handle Deletes
   const handleDeleteTicket = async (id: string) => {
     setAlert({ type: 'loading', message: 'Deleting support ticket...' });
@@ -306,7 +377,6 @@ const TicketsManager = React.memo(function TicketsManager({
       const res = await onDeleteTicket(id);
       if (res.success) {
         setAlert({ type: 'success', message: 'Ticket deleted successfully!' });
-        setDeletingId(null);
         setTimeout(() => setAlert({ type: 'idle', message: '' }), 3000);
       } else {
         setAlert({ type: 'error', message: res.error || 'Failed to delete ticket.' });
@@ -337,6 +407,20 @@ const TicketsManager = React.memo(function TicketsManager({
     return filteredTickets.slice(0, visibleCount);
   }, [filteredTickets, visibleCount]);
 
+  // Auto-fetch comments history for visible tickets
+  useEffect(() => {
+    const cfg = config || { webAppUrl: '', isLiveMode: false };
+    visibleTickets.forEach(t => {
+      if (!commentsMap[t.id]) {
+        getComments(cfg, t.id).then(res => {
+          if (res.success && res.comments) {
+            setCommentsMap(prev => ({ ...prev, [t.id]: res.comments! }));
+          }
+        });
+      }
+    });
+  }, [visibleTickets, config]);
+
   const formatDateTime = (isoString: string) => {
     try {
       const date = new Date(isoString);
@@ -362,27 +446,29 @@ const TicketsManager = React.memo(function TicketsManager({
           <p className="text-[13px] text-gray-400 font-bold uppercase">Track customer documentation, requests & general support histories</p>
         </div>
 
-        {/* Mode Switcher */}
-        <button
-          onClick={() => {
-            setSubView(subView === 'list' ? 'create' : 'list');
-            setAlert({ type: 'idle', message: '' });
-          }}
-          id="btn-toggle-ticket-view"
-          className="inline-flex items-center gap-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-[13px] px-5 py-2.5 rounded-full shadow-md shadow-[#3B82F6]/10 transition-colors cursor-pointer h-11"
-        >
-          {subView === 'list' ? (
-            <>
-              <Plus className="w-4 h-4" />
-              <span>File Ticket</span>
-            </>
-          ) : (
-            <>
-              <History className="w-4 h-4" />
-              <span>View Logs</span>
-            </>
-          )}
-        </button>
+        {/* Action Controls */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setSubView(subView === 'list' ? 'create' : 'list');
+              setAlert({ type: 'idle', message: '' });
+            }}
+            id="btn-toggle-ticket-view"
+            className="inline-flex items-center gap-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-[13px] px-5 py-2.5 rounded-full shadow-md shadow-[#3B82F6]/10 transition-colors cursor-pointer h-11"
+          >
+            {subView === 'list' ? (
+              <>
+                <Plus className="w-4 h-4" />
+                <span>File Ticket</span>
+              </>
+            ) : (
+              <>
+                <History className="w-4 h-4" />
+                <span>View Logs</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Global Status Banner using design system Alerts */}
@@ -918,9 +1004,6 @@ const TicketsManager = React.memo(function TicketsManager({
             {visibleTickets.length > 0 ? (
               <>
                 {visibleTickets.map(t => {
-                  const isEditing = editingId === t.id;
-                  const isConfirmDeleting = deletingId === t.id;
-
                   let badgeStyle = '';
                   if (t.status === 'Open') badgeStyle = 'bg-[#22C55E]/10 text-[#22C55E] border-[#22C55E]/20';
                   else badgeStyle = 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20';
@@ -956,70 +1039,58 @@ const TicketsManager = React.memo(function TicketsManager({
                           </div>
                         </div>
 
-                        {/* Status select toggle or badge */}
-                        {isEditing ? (
-                          <div className="flex gap-1">
-                            {(['Open', 'Closed'] as TicketStatus[]).map(st => {
-                              let selectStyle = 'bg-white dark:bg-[#20201a] text-[#2c2c26]/60 dark:text-[#8a8a70] border-black/10 dark:border-white/10';
-                              if (editStatus === st) {
-                                if (st === 'Open') selectStyle = 'bg-[#22C55E] text-white border-[#22C55E]';
-                                if (st === 'Closed') selectStyle = 'bg-[#EF4444] text-white border-[#EF4444]';
-                              }
-                              return (
-                                <button
-                                  key={st}
-                                  type="button"
-                                  onClick={() => setEditStatus(st)}
-                                  className={`text-[9px] font-bold px-2 py-1 rounded-md border transition-colors cursor-pointer ${selectStyle}`}
-                                >
-                                  {st}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex items-center gap-1 shrink-0 ${badgeStyle}`}>
-                            {t.status === 'Open' && <Clock className="w-3 h-3 shrink-0" />}
-                            {t.status}
-                          </span>
-                        )}
+                        {/* Status badge */}
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex items-center gap-1 shrink-0 ${badgeStyle}`}>
+                          {t.status === 'Open' && <Clock className="w-3 h-3 shrink-0" />}
+                          {t.status}
+                        </span>
                       </div>
 
                       {/* Description Notes Text */}
-                      <div className="bg-slate-50 p-3 rounded-xl border border-gray-100">
-                        {isEditing ? (
-                          <div className="space-y-2">
+                      <div className="bg-slate-50 dark:bg-[#1a1a15] p-3 rounded-xl border border-gray-100 dark:border-[#8a8a70]/20">
+                        <p className="text-xs text-gray-700 dark:text-[#ecece5] whitespace-pre-wrap leading-relaxed break-words font-sans">
+                          {t.conversationDescription}
+                        </p>
+                      </div>
+
+                      {/* Ticket Timeline History */}
+                      {(() => {
+                        const ticketComments = (commentsMap[t.id] || [])
+                          .slice()
+                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+                        if (ticketComments.length === 0) return null;
+
+                        return (
+                          <div className="space-y-2 pt-1 border-t border-gray-100 dark:border-[#8a8a70]/20">
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase">EDIT CONVERSATION DESCRIPTION</span>
-                              <span className="text-[9px] font-bold uppercase tracking-wider">
-                                {ticketSaveStatus === 'EDITING' && <span className="text-amber-500 animate-pulse">✏ EDITING...</span>}
-                                {ticketSaveStatus === 'SAVING' && <span className="text-blue-500 animate-pulse">💾 SAVING...</span>}
-                                {ticketSaveStatus === 'SAVED' && <span className="text-emerald-500">✅ SAVED</span>}
-                                {ticketSaveStatus === 'FAILED' && <span className="text-red-500 animate-bounce">❌ SAVE FAILED</span>}
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-[#8a8a70] uppercase tracking-wider">
+                                Ticket Update History ({ticketComments.length})
                               </span>
                             </div>
-                            <textarea
-                              className="w-full text-xs bg-white border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-gray-800 font-sans"
-                              rows={3}
-                              value={editDescription}
-                              onChange={(e) => setEditDescription(e.target.value)}
-                              placeholder="Type ticket logs or notes here. Autosaves as you type..."
-                            />
-                            <div className="flex items-center gap-2 justify-end">
-                              <button
-                                onClick={() => setEditingId(null)}
-                                className="px-4 py-1.5 text-[10px] font-bold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-md cursor-pointer uppercase transition-colors"
-                              >
-                                Done Editing
-                              </button>
+                            <div className="space-y-2">
+                              {ticketComments.map((cmt) => (
+                                <div
+                                  key={cmt.id}
+                                  className="p-3 bg-slate-50/80 dark:bg-[#151510] rounded-xl border border-gray-200/80 dark:border-[#8a8a70]/20 space-y-1"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-gray-900 dark:text-[#ecece5] uppercase font-sans">
+                                      {cmt.commentedBy}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500 dark:text-[#8a8a70] font-sans font-semibold">
+                                      {formatDateTime(cmt.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-800 dark:text-[#ecece5] whitespace-pre-wrap leading-relaxed break-words font-sans pt-0.5">
+                                    {cmt.comment}
+                                  </p>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        ) : (
-                          <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed break-words font-sans">
-                            {t.conversationDescription}
-                          </p>
-                        )}
-                      </div>
+                        );
+                      })()}
 
                       {(() => {
                         const customer = customers.find(c => c.id === t.customerId);
@@ -1042,21 +1113,17 @@ const TicketsManager = React.memo(function TicketsManager({
                       <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-[9px] text-gray-400 uppercase tracking-wider font-bold font-sans">
                         <span>Opened: {formatDateTime(t.createdAt)}</span>
                         
-                        <div className="flex items-center gap-1.5">
-                          {t.status === 'Open' && !isEditing && (
-                            <button
-                              onClick={() => {
-                                setEditingId(t.id);
-                                setEditDescription(t.conversationDescription);
-                                setEditStatus(t.status);
-                              }}
-                              className="p-1.5 hover:bg-blue-50 text-[#3B82F6] rounded-lg border border-gray-100 active:scale-95 transition-all cursor-pointer"
-                              title="Edit Ticket Description / Status"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        {t.status === 'Open' && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(t)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#3B82F6] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900/40 transition-all cursor-pointer"
+                            title="Edit Ticket"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>Edit (✏️)</span>
+                          </button>
+                        )}
                       </div>
 
                     </div>
@@ -1101,6 +1168,90 @@ const TicketsManager = React.memo(function TicketsManager({
             )}
           </div>
 
+        </div>
+      )}
+
+      {/* Edit Ticket Modal */}
+      {editingTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-[#1a1a15] border border-gray-200 dark:border-[#8a8a70]/30 rounded-2xl p-6 shadow-2xl max-w-md w-full space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-[#8a8a70]/20">
+              <h4 className="font-serif font-bold text-sm text-gray-900 dark:text-[#ecece5] uppercase tracking-wide flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-[#3B82F6]" />
+                <span>Edit Ticket</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setEditingTicket(null)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 text-center animate-fade-in">
+                {editSuccessMsg}
+              </div>
+            )}
+
+            {editErrorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-800 text-center animate-fade-in">
+                {editErrorMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEditTicket} className="space-y-4 text-xs">
+              {/* 1. Status * */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-[#ecece5] uppercase mb-1">
+                  Status <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  className="w-full text-xs bg-white dark:bg-[#20201a] border border-gray-300 dark:border-[#8a8a70]/40 rounded-xl p-2.5 font-bold uppercase focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-gray-800 dark:text-[#ecece5]"
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as TicketStatus)}
+                >
+                  <option value="Open">Open</option>
+                  <option value="Closed">Closed</option>
+                </select>
+              </div>
+
+              {/* 2. Comments * */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-[#ecece5] uppercase mb-1">
+                  Comments <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  placeholder="Enter comments..."
+                  rows={5}
+                  className="w-full text-xs bg-white dark:bg-[#20201a] border border-gray-300 dark:border-[#8a8a70]/40 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[#3B82F6] text-gray-800 dark:text-[#ecece5]"
+                  value={editComments}
+                  onChange={(e) => setEditComments(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100 dark:border-[#8a8a70]/20">
+                <button
+                  type="button"
+                  onClick={() => setEditingTicket(null)}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-[#8a8a70] hover:bg-gray-100 dark:hover:bg-[#252520] rounded-xl cursor-pointer uppercase transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit || !editComments.trim()}
+                  className="px-5 py-2 text-xs bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold rounded-xl cursor-pointer uppercase transition-colors disabled:opacity-50 inline-flex items-center gap-1.5 shadow-md shadow-[#3B82F6]/20"
+                >
+                  {isSavingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

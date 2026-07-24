@@ -53,6 +53,28 @@ export interface FollowUp {
   createdAt: string;
 }
 
+export interface TicketComment {
+  id: string; // e.g. CMT-000001
+  ticketId: string;
+  customerId: string;
+  parentTicketId?: string;
+  comment: string;
+  isInternalNote: boolean;
+  commentedBy: string;
+  createdAt: string;
+  updatedAt?: string;
+  status?: string;
+}
+
+export interface TicketActivity {
+  id: string; // e.g. ACT-000001
+  ticketId: string;
+  action: string;
+  performedBy: string;
+  timestamp: string;
+  details?: string;
+}
+
 export interface User {
   id: string; // e.g., USR-000001
   fullName: string;
@@ -68,6 +90,8 @@ export interface CRMData {
   tickets: Ticket[];
   followUps: FollowUp[];
   users?: User[];
+  comments?: TicketComment[];
+  ticketActivities?: TicketActivity[];
 }
 
 export interface SyncConfig {
